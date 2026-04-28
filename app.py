@@ -86,7 +86,7 @@ if seccion == "🏠 Inicio":
     k1.metric("Total clientes", f"{total:,}")
     k2.metric("Clientes Naturales", f"{n_nat:,}", f"{pct_nat:.1f}%")
     k3.metric("Clientes Jurídicos", f"{n_jur:,}", f"{pct_jur:.1f}%")
-    k4.metric("Variables analizadas", "4")
+    k4.metric("Modelos evaluados", "2")
 
     st.markdown("---")
     st.markdown("### ¿Qué encontramos?")
