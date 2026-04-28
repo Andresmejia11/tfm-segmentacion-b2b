@@ -167,12 +167,12 @@ elif seccion == "📊 Segmentación":
             name="NATURAL (B2C)"
         ))
 
-        # Jurídicos — triángulos azules
+        # Jurídicos — triángulos 
         fig.add_trace(go.Scatter(
             x=df_jur_c["NUM_COMPRAS"],
             y=df_jur_c["TOTAL_VENTAS"],
             mode="markers",
-            marker=dict(color="skyblue", opacity=0.7, size=7, symbol="triangle-up"),
+            marker=dict(color="darkorange", opacity=0.7, size=7, symbol="triangle-up"),
             name="JURÍDICO (B2B)"
         ))
 
