@@ -198,8 +198,59 @@ elif seccion == "📊 Segmentación":
             st.dataframe(df_jur_c[["NUM_COMPRAS","TOTAL_VENTAS"]].describe().round(2), use_container_width=True)
 
     elif analisis == "📉 Método del codo":
-        st.subheader("Método del codo")
-        st.info("🚧 En construcción...")
+        st.subheader(f"Método del codo · {tipo_key.title()}")
+
+        ventas_agg3 = ventas.groupby("ID").agg(
+            TOTAL_VENTAS=("IMPORTE", "sum"),
+            PROMEDIO_VENTA=("IMPORTE", "mean"),
+        ).reset_index()
+        consultas_agg3 = consultas.groupby("ID").agg(
+            NUM_CONSULTAS=("IDCONSUMO", "count")
+        ).reset_index()
+        df3 = clientes.merge(ventas_agg3, on="ID", how="left").merge(consultas_agg3, on="ID", how="left")
+        df3["NUM_CONSULTAS"] = df3["NUM_CONSULTAS"].fillna(0).astype(int)
+        naturales3 = ["PERSONA FISICA", "EMPRESARIO"]
+        df3["TIPO_CLIENTE"] = df3["FORMAJURIDICA"].apply(
+            lambda x: "NATURAL" if x in naturales3 else "JURIDICO"
+        )
+
+        vars_clustering = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
+
+        df_tipo = df3[df3["TIPO_CLIENTE"] == tipo_key].copy()
+        df_tipo = df_tipo[
+            (df_tipo["NUM_COMPRAS"] <= df_tipo["NUM_COMPRAS"].quantile(0.95)) &
+            (df_tipo["TOTAL_VENTAS"] <= df_tipo["TOTAL_VENTAS"].quantile(0.95))
+        ]
+
+        for col in vars_clustering:
+            df_tipo[col] = pd.to_numeric(df_tipo[col], errors="coerce")
+            df_tipo[col] = np.log1p(df_tipo[col])
+
+        df_tipo = df_tipo.dropna(subset=vars_clustering)
+        X = df_tipo[vars_clustering]
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Calcular inercias
+        wcss = []
+        K_range = range(1, 10)
+        previous = None
+        results = []
+
+        for k in K_range:
+            km = KMeans(n_clusters=k, init="k-means++", random_state=42, n_init=20)
+            km.fit(X_scaled)
+            inertia = km.inertia_
+            reduccion = None if previous is None else round(previous - inertia, 1)
+            wcss.append(inertia)
+            results.append({"k": k, "Inercia": round(inertia, 1), "Reducción": reduccion})
+            previous = inertia
+
+        # Gráfica del codo
+        fig_codo = go.Figure()
+        fig_codo.add_trace(go.Scatter(
+            x=list(K_range),
+            y=wcss,
 
     elif analisis == "🔵 PCA":
         st.subheader(f"PCA · {tipo_key.title()}")
