@@ -73,6 +73,36 @@ seccion = st.sidebar.radio("", [
     "⚖️ Comparación"
 ])
 
+# ── Pipeline clustering ─────────────────────────────────────
+@st.cache_data(show_spinner="Calculando clusters...")
+def calcular_clusters(tipo_key):
+    d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
+    d = d[
+        (d["NUM_COMPRAS"] <= d["NUM_COMPRAS"].quantile(0.95)) &
+        (d["TOTAL_VENTAS"] <= d["TOTAL_VENTAS"].quantile(0.95))
+    ].copy()
+    for col in VARS:
+        d[col] = pd.to_numeric(d[col], errors="coerce")
+    d_log = d.copy()
+    for col in VARS:
+        d_log[col] = np.log1p(d_log[col])
+    mask  = d_log[VARS].notna().all(axis=1)
+    d_log = d_log[mask].reset_index(drop=True)
+    d     = d[mask].reset_index(drop=True)
+    scaler   = StandardScaler()
+    X_scaled = scaler.fit_transform(d_log[VARS])
+    km = KMeans(n_clusters=3, init="k-means++", random_state=42, n_init=20)
+    d["cluster"] = km.fit_predict(X_scaled)
+    pca   = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    d["PC1"] = X_pca[:, 0]
+    d["PC2"] = X_pca[:, 1]
+    var_exp = pca.explained_variance_ratio_
+    return d, X_scaled, var_exp
+
+NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
+COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
+
 # ══════════════════════════════════════════════════════════════
 # INICIO
 # ══════════════════════════════════════════════════════════════
@@ -126,58 +156,25 @@ elif seccion == "📊 Segmentación":
 
     st.markdown("---")
 
-    @st.cache_data(show_spinner="Calculando clusters...")
-    def calcular_clusters(tipo_key):
-        d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
-        d = d[
-            (d["NUM_COMPRAS"] <= d["NUM_COMPRAS"].quantile(0.95)) &
-            (d["TOTAL_VENTAS"] <= d["TOTAL_VENTAS"].quantile(0.95))
-        ].copy()
-        for col in VARS:
-            d[col] = pd.to_numeric(d[col], errors="coerce")
-        d_log = d.copy()
-        for col in VARS:
-            d_log[col] = np.log1p(d_log[col])
-        mask  = d_log[VARS].notna().all(axis=1)
-        d_log = d_log[mask].reset_index(drop=True)
-        d     = d[mask].reset_index(drop=True)
-        scaler   = StandardScaler()
-        X_scaled = scaler.fit_transform(d_log[VARS])
-        km = KMeans(n_clusters=3, init="k-means++", random_state=42, n_init=20)
-        d["cluster"] = km.fit_predict(X_scaled)
-        pca   = PCA(n_components=2)
-        X_pca = pca.fit_transform(X_scaled)
-        d["PC1"] = X_pca[:, 0]
-        d["PC2"] = X_pca[:, 1]
-        var_exp  = pca.explained_variance_ratio_
-        return d, X_scaled, var_exp
-
     df_seg, X_scaled, var_exp = calcular_clusters(tipo_key)
-
-    NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
-    COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
     df_seg["Segmento"] = df_seg["cluster"].map(NOMBRES)
+    color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
 
-    # ── Perfiles ──────────────────────────────────────────────
     if analisis == "👥 Perfiles de clusters":
         st.subheader(f"Perfiles de clusters · {tipo_key.title()}")
-
         perfil = df_seg.groupby("Segmento")[VARS].mean().reset_index()
-
         col1, col2, col3 = st.columns(3)
         for col, seg in zip([col1, col2, col3], ["Ocasionales", "Recurrentes", "Intensivos"]):
             row = perfil[perfil["Segmento"] == seg]
             if not row.empty:
                 col.markdown(f"**{seg}**")
                 col.metric("Ventas promedio", f"${row['TOTAL_VENTAS'].values[0]:,.0f}")
-                col.metric("Nº compras",       f"{row['NUM_COMPRAS'].values[0]:.1f}")
-                col.metric("Nº consultas",     f"{row['NUM_CONSULTAS'].values[0]:.0f}")
-                col.metric("Empresas únicas",  f"{row['EMPRESASUNICAS_CONSULT'].values[0]:.1f}")
-
+                col.metric("Nº compras",      f"{row['NUM_COMPRAS'].values[0]:.1f}")
+                col.metric("Nº consultas",    f"{row['NUM_CONSULTAS'].values[0]:.0f}")
+                col.metric("Empresas únicas", f"{row['EMPRESASUNICAS_CONSULT'].values[0]:.1f}")
         st.markdown("---")
         st.markdown("**Tabla completa de promedios**")
         st.dataframe(perfil.set_index("Segmento").round(2), use_container_width=True)
-
         st.markdown("**Distribución de clientes por segmento**")
         conteo = df_seg["Segmento"].value_counts().reset_index()
         conteo.columns = ["Segmento", "Clientes"]
@@ -186,10 +183,8 @@ elif seccion == "📊 Segmentación":
         fig.update_layout(showlegend=False, height=350)
         st.plotly_chart(fig, use_container_width=True)
 
-    # ── Plano FM ──────────────────────────────────────────────
     elif analisis == "📈 Plano FM (Frecuencia vs Monto)":
         st.subheader("Plano FM · Naturales vs Jurídicos")
-
         df_nat_c = df[df["TIPO_CLIENTE"] == "NATURAL"].copy()
         df_nat_c = df_nat_c[
             (df_nat_c["NUM_COMPRAS"] <= df_nat_c["NUM_COMPRAS"].quantile(0.95)) &
@@ -200,9 +195,7 @@ elif seccion == "📊 Segmentación":
             (df_jur_c["NUM_COMPRAS"] <= df_jur_c["NUM_COMPRAS"].quantile(0.95)) &
             (df_jur_c["TOTAL_VENTAS"] <= df_jur_c["TOTAL_VENTAS"].quantile(0.95))
         ]
-
         escala = st.radio("Escala del eje Y:", ["Normal", "Logarítmica"], horizontal=True)
-
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=df_nat_c["NUM_COMPRAS"], y=df_nat_c["TOTAL_VENTAS"],
@@ -225,7 +218,6 @@ elif seccion == "📊 Segmentación":
             legend=dict(orientation="h", yanchor="bottom", y=1.02)
         )
         st.plotly_chart(fig, use_container_width=True)
-
         st.markdown("**Comparativa estadística**")
         col1, col2 = st.columns(2)
         with col1:
@@ -235,10 +227,8 @@ elif seccion == "📊 Segmentación":
             st.markdown("🟠 **Jurídicos**")
             st.dataframe(df_jur_c[["NUM_COMPRAS","TOTAL_VENTAS"]].describe().round(2), use_container_width=True)
 
-    # ── Método del codo ───────────────────────────────────────
     elif analisis == "📉 Método del codo":
         st.subheader(f"Método del codo · {tipo_key.title()}")
-
         wcss, results, previous = [], [], None
         for k in range(1, 10):
             km = KMeans(n_clusters=k, init="k-means++", random_state=42, n_init=20)
@@ -247,18 +237,15 @@ elif seccion == "📊 Segmentación":
             reduccion = None if previous is None else round(previous - inertia, 1)
             wcss.append(inertia)
             results.append({"k": k, "Inercia": round(inertia, 1), "Reducción": reduccion})
-            previous = inertia
-
-           color_linea = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=list(range(1, 10)), y=wcss,
-                mode="lines+markers",
-                marker=dict(size=8, color=color_linea),
-                line=dict(color=color_linea, width=2),
-                name=tipo_key
-            ))
+            previous  = inertia
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=list(range(1, 10)), y=wcss,
+            mode="lines+markers",
+            marker=dict(size=8, color=color_tipo),
+            line=dict(color=color_tipo, width=2),
+            name=tipo_key
+        ))
         fig.add_vline(x=3, line_dash="dash", line_color="red",
                       annotation_text="k=3 óptimo", annotation_position="top right")
         fig.update_layout(
@@ -268,16 +255,13 @@ elif seccion == "📊 Segmentación":
             template="simple_white", height=400
         )
         st.plotly_chart(fig, use_container_width=True)
-
         st.markdown("**Tabla de inercias · justificación de k=3**")
         df_codo = pd.DataFrame(results)
         st.dataframe(df_codo, use_container_width=True, hide_index=True)
         st.success("✅ La mayor reducción de inercia ocurre en k=3, confirmando el número óptimo de clústeres.")
 
-    # ── PCA ───────────────────────────────────────────────────
     elif analisis == "🔵 PCA":
         st.subheader(f"PCA · {tipo_key.title()}")
-
         fig = px.scatter(
             df_seg, x="PC1", y="PC2", color="Segmento",
             color_discrete_map=COLORES, opacity=0.7, template="simple_white",
@@ -293,28 +277,22 @@ elif seccion == "📊 Segmentación":
             showarrow=False, font=dict(size=11, color="#888")
         )
         st.plotly_chart(fig, use_container_width=True)
-
         col1, col2 = st.columns(2)
         col1.metric("Varianza explicada PC1", f"{var_exp[0]*100:.1f}%")
         col2.metric("Varianza explicada PC2", f"{var_exp[1]*100:.1f}%")
         st.info(f"Entre PC1 y PC2 se explica el **{(var_exp[0]+var_exp[1])*100:.1f}%** de la varianza total.")
 
-    # ── DBSCAN ────────────────────────────────────────────────
     elif analisis == "🔍 DBSCAN":
         st.subheader(f"DBSCAN · {tipo_key.title()}")
-
         eps_val = 0.85 if tipo_key == "NATURAL" else 0.7
         dbscan  = DBSCAN(eps=eps_val, min_samples=5)
         labels  = dbscan.fit_predict(X_scaled)
         df_seg["cluster_db"] = labels
-
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         n_ruido    = list(labels).count(-1)
-
         col1, col2 = st.columns(2)
         col1.metric("Clústeres detectados", n_clusters)
         col2.metric("Puntos de ruido",      n_ruido)
-
         df_seg["DBSCAN"] = df_seg["cluster_db"].apply(
             lambda x: "Ruido" if x == -1 else f"Cluster {x}"
         )
@@ -328,16 +306,13 @@ elif seccion == "📊 Segmentación":
         st.plotly_chart(fig, use_container_width=True)
         st.info("Los puntos en **Ruido** son clientes atípicos que DBSCAN no asigna a ningún grupo — a diferencia de K-Means que los fuerza a un cluster.")
 
-    # ── SOM ───────────────────────────────────────────────────
     elif analisis == "🧠 SOM":
         st.subheader(f"SOM · Mapa Autoorganizado · {tipo_key.title()}")
-
         with st.spinner("Entrenando SOM..."):
             som = MiniSom(x=6, y=6, input_len=X_scaled.shape[1],
                           sigma=1.0, learning_rate=0.5, random_seed=42)
             som.random_weights_init(X_scaled)
             som.train_random(X_scaled, 1000)
-
         u_matrix = som.distance_map()
         fig = go.Figure(data=go.Heatmap(
             z=u_matrix,
@@ -362,7 +337,6 @@ elif seccion == "📊 Segmentación":
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
-
     tipo = st.radio("Selecciona el tipo de cliente:",
                     ["🔵 Naturales", "🟣 Jurídicos"], horizontal=True)
     tipo_key = "NATURAL" if "Naturales" in tipo else "JURIDICO"
