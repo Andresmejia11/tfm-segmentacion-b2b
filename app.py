@@ -249,12 +249,15 @@ elif seccion == "📊 Segmentación":
             results.append({"k": k, "Inercia": round(inertia, 1), "Reducción": reduccion})
             previous = inertia
 
+       color_linea = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
+
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=list(range(1, 10)), y=wcss,
             mode="lines+markers",
-            marker=dict(size=8, color="navy"),
-            line=dict(color="navy", width=2)
+            marker=dict(size=8, color=color_linea),
+            line=dict(color=color_linea, width=2),
+            name=tipo_key
         ))
         fig.add_vline(x=3, line_dash="dash", line_color="red",
                       annotation_text="k=3 óptimo", annotation_position="top right")
