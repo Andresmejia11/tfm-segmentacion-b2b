@@ -128,7 +128,66 @@ elif seccion == "📊 Segmentación":
 
     elif analisis == "📈 Plano FM (Frecuencia vs Monto)":
         st.subheader("Plano FM · Frecuencia vs Monto")
-        st.info("🚧 En construcción...")
+
+        ventas_agg2 = ventas.groupby("ID").agg(
+            TOTAL_VENTAS=("IMPORTE", "sum"),
+            PROMEDIO_VENTA=("IMPORTE", "mean"),
+        ).reset_index()
+        consultas_agg2 = consultas.groupby("ID").agg(
+            NUM_CONSULTAS=("IDCONSUMO", "count")
+        ).reset_index()
+        df2 = clientes.merge(ventas_agg2, on="ID", how="left").merge(consultas_agg2, on="ID", how="left")
+        df2["NUM_CONSULTAS"] = df2["NUM_CONSULTAS"].fillna(0).astype(int)
+        naturales2 = ["PERSONA FISICA", "EMPRESARIO"]
+        df2["TIPO_CLIENTE"] = df2["FORMAJURIDICA"].apply(
+            lambda x: "NATURAL" if x in naturales2 else "JURIDICO"
+        )
+        df_nat2 = df2[df2["TIPO_CLIENTE"] == "NATURAL"]
+        df_jur2 = df2[df2["TIPO_CLIENTE"] == "JURIDICO"]
+
+        # Filtro outliers p95
+        df_nat_c = df_nat2[
+            (df_nat2["NUM_COMPRAS"] <= df_nat2["NUM_COMPRAS"].quantile(0.95)) &
+            (df_nat2["TOTAL_VENTAS"] <= df_nat2["TOTAL_VENTAS"].quantile(0.95))
+        ]
+        df_jur_c = df_jur2[
+            (df_jur2["NUM_COMPRAS"] <= df_jur2["NUM_COMPRAS"].quantile(0.95)) &
+            (df_jur2["TOTAL_VENTAS"] <= df_jur2["TOTAL_VENTAS"].quantile(0.95))
+        ]
+
+        escala = st.radio("Escala del eje Y:", ["Normal", "Logarítmica"], horizontal=True)
+
+        if tipo_key == "NATURAL":
+            df_plot = df_nat_c
+            color = "mediumslateblue"
+        else:
+            df_plot = df_jur_c
+            color = "skyblue"
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_plot["NUM_COMPRAS"],
+            y=df_plot["TOTAL_VENTAS"],
+            mode="markers",
+            marker=dict(color=color, opacity=0.5, size=6),
+            name=tipo_key
+        ))
+        fig.update_layout(
+            title=f"Plano FM · {tipo_key.title()}",
+            xaxis_title="Frecuencia (Nº Compras)",
+            yaxis_title="Monto Total de Ventas",
+            yaxis_type="log" if escala == "Logarítmica" else "linear",
+            template="simple_white",
+            height=500
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Tabla estadística
+        st.markdown("**Estadísticas descriptivas**")
+        st.dataframe(
+            df_plot[["NUM_COMPRAS", "TOTAL_VENTAS"]].describe().round(2),
+            use_container_width=True
+        )
 
     elif analisis == "📉 Método del codo":
         st.subheader("Método del codo")
