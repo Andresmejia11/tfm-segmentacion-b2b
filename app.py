@@ -14,7 +14,24 @@ from sklearn.metrics import classification_report
 from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
+# ── Carga de datos desde GitHub ────────────────────────────
+@st.cache_data(show_spinner="Cargando datos...")
+def cargar_datos():
+    base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
+    
+    clientes = pd.read_csv(base + "CLIENTES.txt", sep="|", encoding="latin-1")
+    ventas   = pd.read_csv(base + "VENTAS.txt",   sep="|", encoding="latin-1")
+    
+    import zipfile, io, requests
+    r = requests.get(base + "CONSULTAS.zip")
+    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        nombre = [f for f in z.namelist() if f.endswith(".txt")][0]
+        with z.open(nombre) as f:
+            consultas = pd.read_csv(f, sep="|", encoding="latin-1")
 
+    return clientes, ventas, consultas
+
+clientes, ventas, consultas = cargar_datos()
 # ── Configuración ──────────────────────────────────────────
 st.set_page_config(
     page_title="Segmentación Clientes B2B · Colombia",
