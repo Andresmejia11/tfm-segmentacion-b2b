@@ -101,7 +101,50 @@ if seccion == "🏠 Inicio":
 # ── SEGMENTACIÓN ────────────────────────────────────────────
 elif seccion == "📊 Segmentación":
     st.title("📊 Segmentación de Clientes")
-    st.info("🚧 En construcción...")
+    st.markdown("---")
+
+    # Selector tipo de cliente
+    tipo = st.radio("Selecciona el tipo de cliente:", 
+                    ["🔵 Naturales", "🟣 Jurídicos"], 
+                    horizontal=True)
+    
+    tipo_key = "NATURAL" if "Naturales" in tipo else "JURIDICO"
+
+    # Selector de análisis
+    analisis = st.selectbox("¿Qué análisis quieres ver?", [
+        "👥 Perfiles de clusters",
+        "📈 Plano FM (Frecuencia vs Monto)",
+        "📉 Método del codo",
+        "🔵 PCA",
+        "🔍 DBSCAN",
+        "🧠 SOM"
+    ])
+
+    st.markdown("---")
+
+    if analisis == "👥 Perfiles de clusters":
+        st.subheader(f"Perfiles de clusters · {tipo_key.title()}")
+        st.info("🚧 En construcción...")
+
+    elif analisis == "📈 Plano FM (Frecuencia vs Monto)":
+        st.subheader("Plano FM · Frecuencia vs Monto")
+        st.info("🚧 En construcción...")
+
+    elif analisis == "📉 Método del codo":
+        st.subheader("Método del codo")
+        st.info("🚧 En construcción...")
+
+    elif analisis == "🔵 PCA":
+        st.subheader(f"PCA · {tipo_key.title()}")
+        st.info("🚧 En construcción...")
+
+    elif analisis == "🔍 DBSCAN":
+        st.subheader(f"DBSCAN · {tipo_key.title()}")
+        st.info("🚧 En construcción...")
+
+    elif analisis == "🧠 SOM":
+        st.subheader(f"SOM · {tipo_key.title()}")
+        st.info("🚧 En construcción...")
 
 # ── PREDICCIÓN ──────────────────────────────────────────────
 elif seccion == "🔮 Predicción":
