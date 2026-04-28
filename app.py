@@ -55,7 +55,48 @@ if seccion == "🏠 Inicio":
     st.title("📊 Segmentación de Clientes B2B")
     st.subheader("Análisis de recurrencia en el sector de información empresarial · Colombia")
     st.markdown("---")
-    st.info("👈 Usa el menú lateral para navegar por las secciones del análisis.")
+
+    # Procesamiento básico
+    ventas_agg = ventas.groupby("ID").agg(
+        TOTAL_VENTAS=("IMPORTE", "sum"),
+        PROMEDIO_VENTA=("IMPORTE", "mean"),
+    ).reset_index()
+
+    consultas_agg = consultas.groupby("ID").agg(
+        NUM_CONSULTAS=("IDCONSUMO", "count")
+    ).reset_index()
+
+    df = clientes.merge(ventas_agg, on="ID", how="left").merge(consultas_agg, on="ID", how="left")
+    df["NUM_CONSULTAS"] = df["NUM_CONSULTAS"].fillna(0).astype(int)
+
+    naturales = ["PERSONA FISICA", "EMPRESARIO"]
+    df["TIPO_CLIENTE"] = df["FORMAJURIDICA"].apply(
+        lambda x: "NATURAL" if x in naturales else "JURIDICO"
+    )
+
+    total     = len(df)
+    n_nat     = (df["TIPO_CLIENTE"] == "NATURAL").sum()
+    n_jur     = (df["TIPO_CLIENTE"] == "JURIDICO").sum()
+    pct_nat   = n_nat / total * 100
+    pct_jur   = n_jur / total * 100
+
+    # KPIs
+    st.markdown("### Resumen general")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total clientes", f"{total:,}")
+    k2.metric("Clientes Naturales", f"{n_nat:,}", f"{pct_nat:.1f}%")
+    k3.metric("Clientes Jurídicos", f"{n_jur:,}", f"{pct_jur:.1f}%")
+    k4.metric("Variables analizadas", "4")
+
+    st.markdown("---")
+    st.markdown("### ¿Qué encontramos?")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.success("🔵 **Clientes Naturales** · 3 segmentos identificados: Ocasionales, Recurrentes e Intensivos")
+        st.success("🟣 **Clientes Jurídicos** · 3 segmentos identificados: Ocasionales, Recurrentes e Intensivos")
+    with col2:
+        st.info("🎯 **Predicción Naturales** · Random Forest 96% de precisión")
+        st.info("🎯 **Predicción Jurídicos** · Random Forest 89% de precisión")
 
 # ── SEGMENTACIÓN ────────────────────────────────────────────
 elif seccion == "📊 Segmentación":
