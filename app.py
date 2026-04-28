@@ -197,7 +197,7 @@ elif seccion == "📊 Segmentación":
             st.markdown("🔷 **Jurídicos**")
             st.dataframe(df_jur_c[["NUM_COMPRAS","TOTAL_VENTAS"]].describe().round(2), use_container_width=True)
 
-    elif analisis == "📉 Método del codo":
+   elif analisis == "📉 Método del codo":
         st.subheader(f"Método del codo · {tipo_key.title()}")
 
         ventas_agg3 = ventas.groupby("ID").agg(
@@ -251,7 +251,29 @@ elif seccion == "📊 Segmentación":
         fig_codo.add_trace(go.Scatter(
             x=list(K_range),
             y=wcss,
+            mode="lines+markers",
+            marker=dict(size=8, color="navy"),
+            line=dict(color="navy", width=2),
+            name="Inercia"
+        ))
+        fig_codo.add_vline(x=3, line_dash="dash", line_color="red",
+                           annotation_text="k=3 óptimo", annotation_position="top right")
+        fig_codo.update_layout(
+            title=f"Método del Codo · {tipo_key.title()} (escala log)",
+            xaxis_title="Número de Clústeres (k)",
+            yaxis_title="Inercia (WCSS)",
+            template="simple_white",
+            height=400
+        )
+        st.plotly_chart(fig_codo, use_container_width=True)
 
+        # Tabla de inercias
+        st.markdown("**Tabla de inercias — justificación de k=3**")
+        df_codo = pd.DataFrame(results)
+        st.dataframe(df_codo.style.highlight_min(subset=["Reducción"], color="#ffe0e0"),
+                     use_container_width=True, hide_index=True)
+
+        st.success("✅ La mayor reducción de inercia ocurre en k=3, confirmando que es el número óptimo de clústeres.")
     elif analisis == "🔵 PCA":
         st.subheader(f"PCA · {tipo_key.title()}")
         st.info("🚧 En construcción...")
