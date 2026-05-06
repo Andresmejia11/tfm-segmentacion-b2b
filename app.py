@@ -270,13 +270,21 @@ elif seccion == "📊 Segmentación":
                           sigma=1.0, learning_rate=0.5, random_seed=42)
             som.random_weights_init(X_scaled)
             som.train_random(X_scaled, 1000)
+        u_matrix = som.distance_map()
         fig = go.Figure(data=go.Heatmap(
-            z=som.distance_map(), colorscale="RdYlBu_r",
-            colorbar=dict(title="Distancia entre nodos")
+            z=u_matrix,
+            colorscale="RdYlBu_r",
+            zsmooth="best",
+            colorbar=dict(title="Distancia entre nodos"),
+            showscale=True
         ))
-        fig.update_layout(title=f"U-Matrix SOM · {tipo_key.title()}",
-                          xaxis_title="Columna", yaxis_title="Fila",
-                          height=450, template="simple_white")
+        fig.update_layout(
+            title=f"SOM - U-Matrix · {tipo_key.title()}",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            height=500,
+            template="simple_white"
+        )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
         **Cómo leer el mapa:**
