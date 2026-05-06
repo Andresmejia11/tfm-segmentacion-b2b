@@ -332,10 +332,218 @@ elif seccion == "📊 Segmentación":
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
+
     tipo = st.radio("Selecciona el tipo de cliente:",
                     ["🔵 Naturales", "🟣 Jurídicos"], horizontal=True)
     tipo_key = "NATURAL" if "Naturales" in tipo else "JURIDICO"
-    st.info("🚧 En construcción...")
+    st.markdown("---")
+
+    # ── Umbrales exactos del notebook ──────────────────────────
+    def segmentar_nat(x):
+        if x <= 15:   return "MUY_BAJO"
+        elif x <= 35: return "BAJO"
+        elif x <= 65: return "MEDIO"
+        elif x <= 105: return "ALTO"
+        else:         return "VIP"
+
+    def segmentar_jur(x):
+        if x <= 35:   return "MUY_BAJO"
+        elif x <= 70: return "BAJO"
+        elif x <= 214: return "MEDIO"
+        elif x <= 500: return "ALTO"
+        else:         return "VIP"
+
+    @st.cache_data(show_spinner="Entrenando modelos...")
+    def entrenar_modelos(tipo_key):
+        import warnings
+        warnings.filterwarnings("ignore")
+
+        d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
+
+        # Etiquetas según umbrales del notebook
+        if tipo_key == "NATURAL":
+            d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
+        else:
+            d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
+
+        # Variables con One-Hot Encoding igual al notebook
+        cols_cat = [c for c in ["CANAL_REGISTRO", "FORMAJURIDICA", "SECTOR",
+                                 "ESTADO", "DEPARTAMENTO", "TAMAÑO"] if c in d.columns]
+        d_encoded = pd.get_dummies(d, columns=cols_cat, drop_first=True)
+
+        # Variables numéricas base
+        cols_num = ["TOTAL_VENTAS", "PROMEDIO_VENTA", "NUM_COMPRAS",
+                    "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
+                    "ANTIGUEDAD", "DIASCLIENTE"]
+        cols_num = [c for c in cols_num if c in d_encoded.columns]
+
+        # X con todas las columnas numéricas + dummies
+        cols_dummies = [c for c in d_encoded.columns if c not in df.columns or c in cols_num]
+        cols_X = list(set(cols_num + cols_dummies) - {"segmento_final", "TIPO_CLIENTE", "ID"})
+        cols_X = [c for c in cols_X if c in d_encoded.columns and d_encoded[c].dtype in ["float64","int64","uint8"]]
+
+        X = d_encoded[cols_X].fillna(0)
+        y = d_encoded["segmento_final"]
+
+        from sklearn.model_selection import train_test_split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+
+        # Random Forest
+        rf = RandomForestClassifier(random_state=42)
+        rf.fit(X_train, y_train)
+        y_pred_rf = rf.predict(X_test)
+        report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
+
+        # Importancias
+        importancias = pd.Series(
+            rf.feature_importances_, index=X.columns
+        ).sort_values(ascending=False).head(10)
+
+        # Logistic Regression
+        from sklearn.preprocessing import StandardScaler as SS
+        scaler2 = SS()
+        X_train_sc = scaler2.fit_transform(X_train)
+        X_test_sc  = scaler2.transform(X_test)
+        lr = LogisticRegression(max_iter=1000, random_state=42)
+        lr.fit(X_train_sc, y_train)
+        y_pred_lr = lr.predict(X_test_sc)
+        report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
+
+        return rf, lr, scaler2, X.columns.tolist(), report_rf, report_lr, importancias
+
+    rf_model, lr_model, scaler2, feature_cols, report_rf, report_lr, importancias = entrenar_modelos(tipo_key)
+
+    # ── Métricas comparativas ───────────────────────────────────
+    st.markdown("### Comparación de modelos")
+    acc_rf = report_rf["accuracy"]
+    acc_lr = report_lr["accuracy"]
+
+    col1, col2 = st.columns(2)
+    col1.metric("🌲 Random Forest · Precisión global", f"{acc_rf:.0%}",
+                delta="Modelo recomendado" if acc_rf > acc_lr else None)
+    col2.metric("📈 Regresión Logística · Precisión global", f"{acc_lr:.0%}")
+
+    with st.expander("¿Por qué Random Forest es mejor en este caso?"):
+        st.markdown("""
+        - **Random Forest** captura relaciones no lineales entre variables, lo que lo hace más adecuado para segmentación de clientes.
+        - **Regresión Logística** asume relaciones lineales, lo que limita su capacidad para distinguir segmentos complejos como ALTO y VIP.
+        - La diferencia es especialmente notable en los segmentos de mayor valor, donde RF logra identificarlos correctamente con mayor frecuencia.
+        """)
+
+    st.markdown("---")
+
+    # ── Tabla de métricas por segmento ─────────────────────────
+    modelo_sel = st.selectbox("Ver detalle de métricas por segmento:",
+                               ["🌲 Random Forest", "📈 Regresión Logística"])
+    report_sel = report_rf if "Random" in modelo_sel else report_lr
+
+    segmentos = ["MUY_BAJO", "BAJO", "MEDIO", "ALTO", "VIP"]
+    filas = []
+    for seg in segmentos:
+        if seg in report_sel:
+            r = report_sel[seg]
+            filas.append({
+                "Segmento":   seg,
+                "Precisión":  f"{r['precision']:.0%}",
+                "Recall":     f"{r['recall']:.0%}",
+                "F1-Score":   f"{r['f1-score']:.0%}",
+                "Soporte":    int(r['support'])
+            })
+    st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ── Importancia de variables ────────────────────────────────
+    st.markdown("### Variables más importantes · Random Forest")
+    fig_imp = go.Figure(go.Bar(
+        x=importancias.values,
+        y=importancias.index,
+        orientation="h",
+        marker=dict(color="mediumslateblue" if tipo_key == "NATURAL" else "darkorange")
+    ))
+    fig_imp.update_layout(
+        title=f"Top 10 variables · {tipo_key.title()}",
+        xaxis_title="Importancia",
+        yaxis=dict(autorange="reversed"),
+        template="simple_white",
+        height=400
+    )
+    st.plotly_chart(fig_imp, use_container_width=True)
+
+    with st.expander("¿Cómo usar estas variables para tomar decisiones?"):
+        st.markdown("""
+        Las variables más importantes indican qué factores definen el valor de un cliente:
+        - **PROMEDIO_VENTA alto** → cliente de alto valor. Priorizar fidelización y atención personalizada.
+        - **NUM_COMPRAS alto** → cliente recurrente. Ideal para programas de lealtad.
+        - **NUM_CONSULTAS alto** → cliente con interés activo. Oportunidad para ampliar oferta de productos.
+        - **EMPRESASUNICAS_CONSULT alto** → cliente que consulta muchas empresas. Potencial de expansión de cartera.
+
+        **Estrategia sugerida por segmento:**
+        - 🔴 **MUY_BAJO / BAJO:** campañas de activación y reenganche.
+        - 🟡 **MEDIO:** incentivos para aumentar frecuencia de compra.
+        - 🟢 **ALTO / VIP:** atención prioritaria, descuentos exclusivos, gestor dedicado.
+        """)
+
+    st.markdown("---")
+
+    # ── Predictor individual ────────────────────────────────────
+    st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
+    st.markdown("Ingresa los datos del cliente y el modelo Random Forest predecirá su segmento.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        total_ventas   = st.number_input("Ventas totales (COP)",      min_value=0.0, value=50.0,  step=10.0)
+        promedio_venta = st.number_input("Promedio por venta (COP)",  min_value=0.0, value=25.0,  step=5.0)
+        num_compras    = st.number_input("Número de compras",         min_value=0,   value=2,     step=1)
+    with c2:
+        num_consultas  = st.number_input("Número de consultas",       min_value=0,   value=5,     step=1)
+        emp_unicas     = st.number_input("Empresas únicas consultadas",min_value=0,   value=3,     step=1)
+        antiguedad     = st.number_input("Antigüedad (días)",         min_value=0,   value=365,   step=30)
+
+    COLORES_SEG = {
+        "MUY_BAJO": "#94a3b8",
+        "BAJO":     "#60a5fa",
+        "MEDIO":    "#34d399",
+        "ALTO":     "#f59e0b",
+        "VIP":      "#ef4444"
+    }
+
+    if st.button("🔮 Predecir segmento"):
+        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
+        for col, val in [("TOTAL_VENTAS", total_ventas), ("PROMEDIO_VENTA", promedio_venta),
+                         ("NUM_COMPRAS", num_compras),   ("NUM_CONSULTAS", num_consultas),
+                         ("EMPRESASUNICAS_CONSULT", emp_unicas), ("ANTIGUEDAD", antiguedad)]:
+            if col in X_new.columns:
+                X_new[col] = val
+
+        pred  = rf_model.predict(X_new)[0]
+        proba = rf_model.predict_proba(X_new)[0]
+        color = COLORES_SEG.get(pred, "#6366f1")
+
+        st.markdown(f"""
+        <div style="background:{color}22;border:2px solid {color};border-radius:12px;
+                    padding:1.5rem;margin-top:1rem;text-align:center">
+            <div style="font-size:13px;color:{color};text-transform:uppercase;
+                        letter-spacing:0.1em;margin-bottom:8px">Segmento predicho</div>
+            <div style="font-size:2.5rem;font-weight:700;color:{color}">{pred}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("**Probabilidad por segmento:**")
+        clases = rf_model.classes_
+        for cls, prob in sorted(zip(clases, proba), key=lambda x: -x[1]):
+            col_c = COLORES_SEG.get(cls, "#6366f1")
+            st.markdown(f"""
+            <div style="display:flex;align-items:center;gap:10px;margin:6px 0">
+                <span style="width:90px;font-size:13px;color:#444">{cls}</span>
+                <div style="flex:1;background:#f0f0f0;border-radius:4px;height:10px">
+                    <div style="width:{prob*100:.1f}%;background:{col_c};height:10px;border-radius:4px"></div>
+                </div>
+                <span style="width:45px;text-align:right;font-size:13px;font-weight:600">{prob:.1%}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
 # COMPARACIÓN
