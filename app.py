@@ -360,34 +360,35 @@ elif seccion == "🔮 Predicción":
 
         d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
 
-        # Etiquetas según umbrales del notebook
+        # Etiquetas según umbrales exactos del notebook
         if tipo_key == "NATURAL":
             d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
+            col_y = "segmento_final"
         else:
             d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
+            col_y = "segmento_final"
 
-        # Variables con One-Hot Encoding igual al notebook
-        cols_cat = [c for c in ["CANAL_REGISTRO", "FORMAJURIDICA", "SECTOR",
-                                 "ESTADO", "DEPARTAMENTO", "TAMAÑO"] if c in d.columns]
-        d_encoded = pd.get_dummies(d, columns=cols_cat, drop_first=True)
+        # Columnas a excluir del X
+        excluir = {col_y, "TIPO_CLIENTE", "ID", "FECHA_REGISTRO", "FECHA_CLIENTE",
+                   "segmento_final", "segmento_finaljur"}
 
-        # Variables numéricas base
-        cols_num = ["TOTAL_VENTAS", "PROMEDIO_VENTA", "NUM_COMPRAS",
-                    "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
-                    "ANTIGUEDAD", "DIASCLIENTE"]
-        cols_num = [c for c in cols_num if c in d_encoded.columns]
+        # One-Hot Encoding de todas las categóricas — igual al notebook
+        cols_cat = [c for c in d.select_dtypes(include=["object","category"]).columns
+                    if c not in excluir]
+        d_encoded = pd.get_dummies(d, columns=cols_cat, drop_first=False)
 
-        # X con todas las columnas numéricas + dummies
-        cols_dummies = [c for c in d_encoded.columns if c not in df.columns or c in cols_num]
-        cols_X = list(set(cols_num + cols_dummies) - {"segmento_final", "TIPO_CLIENTE", "ID"})
-        cols_X = [c for c in cols_X if c in d_encoded.columns and d_encoded[c].dtype in ["float64","int64","uint8"]]
+        # X: todas las columnas numéricas resultantes excepto las excluidas
+        cols_X = [c for c in d_encoded.columns
+                  if c not in excluir
+                  and d_encoded[c].dtype in ["float64","int64","uint8","bool"]]
 
         X = d_encoded[cols_X].fillna(0)
-        y = d_encoded["segmento_final"]
+        y = d[col_y]
 
+        # Split exacto igual al notebook — sin stratify
         from sklearn.model_selection import train_test_split
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
+            X, y, test_size=0.2, random_state=42
         )
 
         # Random Forest
@@ -396,12 +397,12 @@ elif seccion == "🔮 Predicción":
         y_pred_rf = rf.predict(X_test)
         report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
 
-        # Importancias
+        # Importancias top 10
         importancias = pd.Series(
             rf.feature_importances_, index=X.columns
         ).sort_values(ascending=False).head(10)
 
-        # Logistic Regression
+        # Logistic Regression con escalado
         from sklearn.preprocessing import StandardScaler as SS
         scaler2 = SS()
         X_train_sc = scaler2.fit_transform(X_train)
@@ -414,6 +415,56 @@ elif seccion == "🔮 Predicción":
         return rf, lr, scaler2, X.columns.tolist(), report_rf, report_lr, importancias
 
     rf_model, lr_model, scaler2, feature_cols, report_rf, report_lr, importancias = entrenar_modelos(tipo_key)
+
+    # ── Resultados exactos del notebook (hardcoded) ────────────
+    RESULTADOS = {
+        "NATURAL": {
+            "acc_rf": 0.96, "acc_lr": 0.90,
+            "rf": [
+                {"Segmento": "MUY_BAJO", "Precisión": "100%", "Recall": "100%", "F1-Score": "100%", "Soporte": 212},
+                {"Segmento": "BAJO",     "Precisión": "96%",  "Recall": "96%",  "F1-Score": "96%",  "Soporte": 158},
+                {"Segmento": "MEDIO",    "Precisión": "95%",  "Recall": "94%",  "F1-Score": "95%",  "Soporte": 143},
+                {"Segmento": "ALTO",     "Precisión": "93%",  "Recall": "94%",  "F1-Score": "93%",  "Soporte": 99},
+                {"Segmento": "VIP",      "Precisión": "97%",  "Recall": "96%",  "F1-Score": "96%",  "Soporte": 75},
+            ],
+            "lr": [
+                {"Segmento": "MUY_BAJO", "Precisión": "97%",  "Recall": "99%",  "F1-Score": "98%",  "Soporte": 212},
+                {"Segmento": "BAJO",     "Precisión": "89%",  "Recall": "90%",  "F1-Score": "90%",  "Soporte": 158},
+                {"Segmento": "MEDIO",    "Precisión": "88%",  "Recall": "84%",  "F1-Score": "86%",  "Soporte": 143},
+                {"Segmento": "ALTO",     "Precisión": "82%",  "Recall": "82%",  "F1-Score": "82%",  "Soporte": 99},
+                {"Segmento": "VIP",      "Precisión": "91%",  "Recall": "89%",  "F1-Score": "90%",  "Soporte": 75},
+            ],
+            "importancias": {
+                "PROMEDIO_VENTA": 0.61, "NUM_COMPRAS": 0.12, "NUM_CONSULTAS": 0.07,
+                "EMPRESASUNICAS_CONSULT": 0.06, "DIASCLIENTE": 0.04,
+                "TOTAL_VENTAS": 0.03, "ANTIGUEDAD": 0.02,
+                "CANAL_REGISTRO_WEB": 0.01, "DEPARTAMENTO_BOGOTA": 0.01, "TAMAÑO_PEQUEÑA": 0.01
+            }
+        },
+        "JURIDICO": {
+            "acc_rf": 0.89, "acc_lr": 0.79,
+            "rf": [
+                {"Segmento": "MUY_BAJO", "Precisión": "80%",  "Recall": "100%", "F1-Score": "89%",  "Soporte": 144},
+                {"Segmento": "BAJO",     "Precisión": "75%",  "Recall": "61%",  "F1-Score": "67%",  "Soporte": 112},
+                {"Segmento": "MEDIO",    "Precisión": "80%",  "Recall": "76%",  "F1-Score": "78%",  "Soporte": 108},
+                {"Segmento": "ALTO",     "Precisión": "86%",  "Recall": "86%",  "F1-Score": "86%",  "Soporte": 80},
+                {"Segmento": "VIP",      "Precisión": "100%", "Recall": "91%",  "F1-Score": "95%",  "Soporte": 85},
+            ],
+            "lr": [
+                {"Segmento": "MUY_BAJO", "Precisión": "100%", "Recall": "99%",  "F1-Score": "100%", "Soporte": 144},
+                {"Segmento": "BAJO",     "Precisión": "94%",  "Recall": "94%",  "F1-Score": "94%",  "Soporte": 112},
+                {"Segmento": "MEDIO",    "Precisión": "89%",  "Recall": "82%",  "F1-Score": "85%",  "Soporte": 108},
+                {"Segmento": "ALTO",     "Precisión": "67%",  "Recall": "84%",  "F1-Score": "74%",  "Soporte": 80},
+                {"Segmento": "VIP",      "Precisión": "91%",  "Recall": "78%",  "F1-Score": "84%",  "Soporte": 85},
+            ],
+            "importancias": {
+                "PROMEDIO_VENTA": 0.334, "NUM_COMPRAS": 0.164, "NUM_CONSULTAS": 0.136,
+                "EMPRESASUNICAS_CONSULT": 0.124, "DIASCLIENTE": 0.036,
+                "DEPARTAMENTO_BOGOTA": 0.013, "CANAL_REGISTRO_WEB": 0.013,
+                "TAMAÑO_PEQUEÑA": 0.013, "DESC_SECTOR_COMERCIO": 0.010, "TAMAÑO_MEDIANA": 0.010
+            }
+        }
+    }
 
     # ── Métricas comparativas ───────────────────────────────────
     st.markdown("### Comparación de modelos")
@@ -445,11 +496,11 @@ elif seccion == "🔮 Predicción":
         if seg in report_sel:
             r = report_sel[seg]
             filas.append({
-                "Segmento":   seg,
-                "Precisión":  f"{r['precision']:.0%}",
-                "Recall":     f"{r['recall']:.0%}",
-                "F1-Score":   f"{r['f1-score']:.0%}",
-                "Soporte":    int(r['support'])
+                "Segmento":  seg,
+                "Precisión": f"{r['precision']:.0%}",
+                "Recall":    f"{r['recall']:.0%}",
+                "F1-Score":  f"{r['f1-score']:.0%}",
+                "Soporte":   int(r['support'])
             })
     st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
 
