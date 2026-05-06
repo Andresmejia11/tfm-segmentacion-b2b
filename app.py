@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.decomposition import PCA
-from sklearn.neighbors import NearestNeighbors
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -15,7 +14,7 @@ from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Carga de datos desde GitHub ────────────────────────────
+# ── Carga de datos ─────────────────────────────────────────
 @st.cache_data(show_spinner="Cargando datos...")
 def cargar_datos():
     base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
@@ -31,12 +30,13 @@ def cargar_datos():
 
 clientes, ventas, consultas = cargar_datos()
 
-# ── Procesamiento base ──────────────────────────────────────
+# ── Procesamiento exacto igual al notebook ─────────────────
 @st.cache_data(show_spinner="Procesando datos...")
 def procesar_datos(_clientes, _ventas, _consultas):
     ventas_agg = _ventas.groupby("ID").agg(
         TOTAL_VENTAS=("IMPORTE", "sum"),
         PROMEDIO_VENTA=("IMPORTE", "mean"),
+        NUM_VENTAS=("IMPORTE", "count")
     ).reset_index()
     consultas_agg = _consultas.groupby("ID").agg(
         NUM_CONSULTAS=("IDCONSUMO", "count")
@@ -45,33 +45,19 @@ def procesar_datos(_clientes, _ventas, _consultas):
     df["NUM_CONSULTAS"]  = df["NUM_CONSULTAS"].fillna(0).astype(int)
     df["TOTAL_VENTAS"]   = df["TOTAL_VENTAS"].fillna(0)
     df["PROMEDIO_VENTA"] = df["PROMEDIO_VENTA"].fillna(0)
+    df["NUM_VENTAS"]     = df["NUM_VENTAS"].fillna(0)
+    df["FECHA_REGISTRO"] = pd.to_datetime(df["FECHA_REGISTRO"], dayfirst=True, errors="coerce")
+    df["FECHA_CLIENTE"]  = pd.to_datetime(df["FECHA_CLIENTE"],  dayfirst=True, errors="coerce")
     naturales = ["PERSONA FISICA", "EMPRESARIO"]
     df["TIPO_CLIENTE"] = df["FORMAJURIDICA"].apply(
         lambda x: "NATURAL" if x in naturales else "JURIDICO"
     )
+    df = df.drop(columns=["IMPORTE_COMPRAS", "NUM_VENTAS", "CONSUMOSTOTAL"], errors="ignore")
     return df
 
 df = procesar_datos(clientes, ventas, consultas)
 
 VARS = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
-
-# ── Configuración ──────────────────────────────────────────
-st.set_page_config(
-    page_title="Segmentación Clientes B2B · Colombia",
-    page_icon="📊",
-    layout="wide"
-)
-
-# ── Menú lateral ───────────────────────────────────────────
-st.sidebar.image("https://img.icons8.com/color/96/combo-chart.png", width=60)
-st.sidebar.title("Navegación")
-
-seccion = st.sidebar.radio("", [
-    "🏠 Inicio",
-    "📊 Segmentación",
-    "🔮 Predicción",
-    "⚖️ Comparación"
-])
 
 # ── Pipeline clustering ─────────────────────────────────────
 @st.cache_data(show_spinner="Calculando clusters...")
@@ -86,9 +72,9 @@ def calcular_clusters(tipo_key):
     d_log = d.copy()
     for col in VARS:
         d_log[col] = np.log1p(d_log[col])
-    mask  = d_log[VARS].notna().all(axis=1)
-    d_log = d_log[mask].reset_index(drop=True)
-    d     = d[mask].reset_index(drop=True)
+    d_log = d_log.dropna(subset=VARS)
+    d     = d.loc[d_log.index].reset_index(drop=True)
+    d_log = d_log.reset_index(drop=True)
     scaler   = StandardScaler()
     X_scaled = scaler.fit_transform(d_log[VARS])
     km = KMeans(n_clusters=3, init="k-means++", random_state=42, n_init=20)
@@ -97,11 +83,27 @@ def calcular_clusters(tipo_key):
     X_pca = pca.fit_transform(X_scaled)
     d["PC1"] = X_pca[:, 0]
     d["PC2"] = X_pca[:, 1]
-    var_exp = pca.explained_variance_ratio_
-    return d, X_scaled, var_exp
+    return d, X_scaled, pca.explained_variance_ratio_
 
 NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
 COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
+
+# ── Configuración ──────────────────────────────────────────
+st.set_page_config(
+    page_title="Segmentación Clientes B2B · Colombia",
+    page_icon="📊",
+    layout="wide"
+)
+
+# ── Menú lateral ───────────────────────────────────────────
+st.sidebar.image("https://img.icons8.com/color/96/combo-chart.png", width=60)
+st.sidebar.title("Navegación")
+seccion = st.sidebar.radio("", [
+    "🏠 Inicio",
+    "📊 Segmentación",
+    "🔮 Predicción",
+    "⚖️ Comparación"
+])
 
 # ══════════════════════════════════════════════════════════════
 # INICIO
@@ -110,20 +112,17 @@ if seccion == "🏠 Inicio":
     st.title("📊 Segmentación de Clientes B2B")
     st.subheader("Análisis de recurrencia en el sector de información empresarial · Colombia")
     st.markdown("---")
-
     total   = len(df)
     n_nat   = (df["TIPO_CLIENTE"] == "NATURAL").sum()
     n_jur   = (df["TIPO_CLIENTE"] == "JURIDICO").sum()
     pct_nat = n_nat / total * 100
     pct_jur = n_jur / total * 100
-
     st.markdown("### Resumen general")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total clientes",     f"{total:,}")
     k2.metric("Clientes Naturales", f"{n_nat:,}",  f"{pct_nat:.1f}%")
     k3.metric("Clientes Jurídicos", f"{n_jur:,}",  f"{pct_jur:.1f}%")
     k4.metric("Modelos evaluados",  "2")
-
     st.markdown("---")
     st.markdown("### ¿Qué encontramos?")
     col1, col2 = st.columns(2)
@@ -140,25 +139,22 @@ if seccion == "🏠 Inicio":
 elif seccion == "📊 Segmentación":
     st.title("📊 Segmentación de Clientes")
     st.markdown("---")
-
     tipo = st.radio("Selecciona el tipo de cliente:",
                     ["🔵 Naturales", "🟣 Jurídicos"], horizontal=True)
-    tipo_key = "NATURAL" if "Naturales" in tipo else "JURIDICO"
+    tipo_key   = "NATURAL" if "Naturales" in tipo else "JURIDICO"
+    color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
 
     analisis = st.selectbox("¿Qué análisis quieres ver?", [
         "👥 Perfiles de clusters",
         "📈 Plano FM (Frecuencia vs Monto)",
-        "📉 Método del codo",
         "🔵 PCA",
         "🔍 DBSCAN",
         "🧠 SOM"
     ])
-
     st.markdown("---")
 
     df_seg, X_scaled, var_exp = calcular_clusters(tipo_key)
     df_seg["Segmento"] = df_seg["cluster"].map(NOMBRES)
-    color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
 
     if analisis == "👥 Perfiles de clusters":
         st.subheader(f"Perfiles de clusters · {tipo_key.title()}")
@@ -227,39 +223,6 @@ elif seccion == "📊 Segmentación":
             st.markdown("🟠 **Jurídicos**")
             st.dataframe(df_jur_c[["NUM_COMPRAS","TOTAL_VENTAS"]].describe().round(2), use_container_width=True)
 
-    elif analisis == "📉 Método del codo":
-        st.subheader(f"Método del codo · {tipo_key.title()}")
-        wcss, results, previous = [], [], None
-        for k in range(1, 10):
-            km = KMeans(n_clusters=k, init="k-means++", random_state=42, n_init=20)
-            km.fit(X_scaled)
-            inertia   = km.inertia_
-            reduccion = None if previous is None else round(previous - inertia, 1)
-            wcss.append(inertia)
-            results.append({"k": k, "Inercia": round(inertia, 1), "Reducción": reduccion})
-            previous  = inertia
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=list(range(1, 10)), y=wcss,
-            mode="lines+markers",
-            marker=dict(size=8, color=color_tipo),
-            line=dict(color=color_tipo, width=2),
-            name=tipo_key
-        ))
-        fig.add_vline(x=3, line_dash="dash", line_color="red",
-                      annotation_text="k=3 óptimo", annotation_position="top right")
-        fig.update_layout(
-            title=f"Método del Codo · {tipo_key.title()} (escala log)",
-            xaxis_title="Número de Clústeres (k)",
-            yaxis_title="Inercia (WCSS)",
-            template="simple_white", height=400
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown("**Tabla de inercias · justificación de k=3**")
-        df_codo = pd.DataFrame(results)
-        st.dataframe(df_codo, use_container_width=True, hide_index=True)
-        st.success("✅ La mayor reducción de inercia ocurre en k=3, confirmando el número óptimo de clústeres.")
-
     elif analisis == "🔵 PCA":
         st.subheader(f"PCA · {tipo_key.title()}")
         fig = px.scatter(
@@ -285,22 +248,16 @@ elif seccion == "📊 Segmentación":
     elif analisis == "🔍 DBSCAN":
         st.subheader(f"DBSCAN · {tipo_key.title()}")
         eps_val = 0.85 if tipo_key == "NATURAL" else 0.7
-        dbscan  = DBSCAN(eps=eps_val, min_samples=5)
-        labels  = dbscan.fit_predict(X_scaled)
-        df_seg["cluster_db"] = labels
+        labels  = DBSCAN(eps=eps_val, min_samples=5).fit_predict(X_scaled)
+        df_seg["DBSCAN"] = ["Ruido" if x == -1 else f"Cluster {x}" for x in labels]
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         n_ruido    = list(labels).count(-1)
         col1, col2 = st.columns(2)
         col1.metric("Clústeres detectados", n_clusters)
         col2.metric("Puntos de ruido",      n_ruido)
-        df_seg["DBSCAN"] = df_seg["cluster_db"].apply(
-            lambda x: "Ruido" if x == -1 else f"Cluster {x}"
-        )
-        fig = px.scatter(
-            df_seg, x="PC1", y="PC2", color="DBSCAN",
-            opacity=0.7, template="simple_white",
-            title=f"DBSCAN · Clientes {tipo_key.title()} (eps={eps_val})"
-        )
+        fig = px.scatter(df_seg, x="PC1", y="PC2", color="DBSCAN",
+                         opacity=0.7, template="simple_white",
+                         title=f"DBSCAN · {tipo_key.title()} (eps={eps_val})")
         fig.update_traces(marker=dict(size=5))
         fig.update_layout(height=480)
         st.plotly_chart(fig, use_container_width=True)
@@ -313,17 +270,13 @@ elif seccion == "📊 Segmentación":
                           sigma=1.0, learning_rate=0.5, random_seed=42)
             som.random_weights_init(X_scaled)
             som.train_random(X_scaled, 1000)
-        u_matrix = som.distance_map()
         fig = go.Figure(data=go.Heatmap(
-            z=u_matrix,
-            colorscale="RdYlBu_r",
+            z=som.distance_map(), colorscale="RdYlBu_r",
             colorbar=dict(title="Distancia entre nodos")
         ))
-        fig.update_layout(
-            title=f"U-Matrix SOM · {tipo_key.title()}",
-            xaxis_title="Columna", yaxis_title="Fila",
-            height=450, template="simple_white"
-        )
+        fig.update_layout(title=f"U-Matrix SOM · {tipo_key.title()}",
+                          xaxis_title="Columna", yaxis_title="Fila",
+                          height=450, template="simple_white")
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
         **Cómo leer el mapa:**
@@ -348,4 +301,35 @@ elif seccion == "🔮 Predicción":
 elif seccion == "⚖️ Comparación":
     st.title("⚖️ Comparación · Naturales vs Jurídicos")
     st.markdown("---")
-    st.info("🚧 En construcción...")
+
+    st.markdown("### 📉 Detalle técnico · Método del codo")
+    st.markdown("Justificación de k=3 para ambos tipos de cliente.")
+
+    col1, col2 = st.columns(2)
+    for col, tipo_key in zip([col1, col2], ["NATURAL", "JURIDICO"]):
+        _, X_sc, _ = calcular_clusters(tipo_key)
+        color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
+        wcss, results, previous = [], [], None
+        for k in range(1, 10):
+            km = KMeans(n_clusters=k, init="k-means++", random_state=42, n_init=20)
+            km.fit(X_sc)
+            inertia   = km.inertia_
+            reduccion = None if previous is None else round(previous - inertia, 1)
+            wcss.append(inertia)
+            results.append({"k": k, "Inercia": round(inertia, 1), "Reducción": reduccion})
+            previous  = inertia
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=list(range(1, 10)), y=wcss, mode="lines+markers",
+            marker=dict(size=8, color=color_tipo),
+            line=dict(color=color_tipo, width=2), name=tipo_key
+        ))
+        fig.add_vline(x=3, line_dash="dash", line_color="red",
+                      annotation_text="k=3", annotation_position="top right")
+        fig.update_layout(
+            title=f"Codo · {tipo_key.title()}",
+            xaxis_title="k", yaxis_title="Inercia",
+            template="simple_white", height=350
+        )
+        col.plotly_chart(fig, use_container_width=True)
+        col.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
