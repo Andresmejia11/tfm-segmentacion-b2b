@@ -178,6 +178,13 @@ elif seccion == "📊 Segmentación":
                      color_discrete_map=COLORES, template="simple_white", text="Clientes")
         fig.update_layout(showlegend=False, height=350)
         st.plotly_chart(fig, use_container_width=True)
+        with st.expander("¿Cómo interpretar estos perfiles?"):
+            st.markdown("""
+            Cada segmento agrupa clientes con comportamiento similar:
+            - **Ocasionales:** compran poco y generan bajos ingresos. Son clientes de bajo compromiso.
+            - **Recurrentes:** compran con frecuencia media y volumen de consultas moderado. Son el segmento más estable.
+            - **Intensivos:** alta frecuencia de compra, alto monto y muchas consultas. Son los clientes más valiosos.
+            """)
 
     elif analisis == "📈 Plano FM (Frecuencia vs Monto)":
         st.subheader("Plano FM · Naturales vs Jurídicos")
@@ -222,6 +229,14 @@ elif seccion == "📊 Segmentación":
         with col2:
             st.markdown("🟠 **Jurídicos**")
             st.dataframe(df_jur_c[["NUM_COMPRAS","TOTAL_VENTAS"]].describe().round(2), use_container_width=True)
+        with st.expander("¿Cómo interpretar el Plano FM?"):
+            st.markdown("""
+            El Plano FM (Frecuencia vs Monto) permite visualizar el comportamiento de compra:
+            - **Eje X (Frecuencia):** cuántas veces ha comprado el cliente.
+            - **Eje Y (Monto):** cuánto dinero ha generado en total.
+            - Los clientes en la esquina superior derecha son los más valiosos — compran mucho y frecuentemente.
+            - La escala logarítmica ayuda a visualizar mejor cuando hay grandes diferencias entre clientes.
+            """)
 
     elif analisis == "🔵 PCA":
         st.subheader(f"PCA · {tipo_key.title()}")
@@ -244,6 +259,14 @@ elif seccion == "📊 Segmentación":
         col1.metric("Varianza explicada PC1", f"{var_exp[0]*100:.1f}%")
         col2.metric("Varianza explicada PC2", f"{var_exp[1]*100:.1f}%")
         st.info(f"Entre PC1 y PC2 se explica el **{(var_exp[0]+var_exp[1])*100:.1f}%** de la varianza total.")
+        with st.expander("¿Cómo interpretar el PCA?"):
+            st.markdown("""
+            El Análisis de Componentes Principales (PCA) reduce las 4 variables a 2 dimensiones para poder visualizarlas:
+            - Cada punto es un cliente.
+            - El color indica a qué segmento pertenece.
+            - Los grupos bien separados confirman que los clusters son distintos entre sí.
+            - Cuanto mayor sea la varianza explicada, más fiel es la representación.
+            """)
 
     elif analisis == "🔍 DBSCAN":
         st.subheader(f"DBSCAN · {tipo_key.title()}")
@@ -262,6 +285,14 @@ elif seccion == "📊 Segmentación":
         fig.update_layout(height=480)
         st.plotly_chart(fig, use_container_width=True)
         st.info("Los puntos en **Ruido** son clientes atípicos que DBSCAN no asigna a ningún grupo — a diferencia de K-Means que los fuerza a un cluster.")
+        with st.expander("¿Cómo interpretar el DBSCAN?"):
+            st.markdown("""
+            DBSCAN es un algoritmo que detecta clusters basándose en densidad, sin necesidad de definir k de antemano:
+            - Agrupa puntos que están cerca entre sí.
+            - Los puntos **Ruido** son clientes con comportamiento tan atípico que no encajan en ningún grupo.
+            - Se usa como validación de los clusters encontrados por K-Means.
+            - Si DBSCAN encuentra los mismos grupos, confirma que la segmentación es sólida.
+            """)
 
     elif analisis == "🧠 SOM":
         st.subheader(f"SOM · Mapa Autoorganizado · {tipo_key.title()}")
@@ -286,11 +317,14 @@ elif seccion == "📊 Segmentación":
             template="simple_white"
         )
         st.plotly_chart(fig, use_container_width=True)
-        st.markdown("""
-        **Cómo leer el mapa:**
-        - 🔵 **Colores fríos (azul)** → zonas de alta densidad = clústeres
-        - 🔴 **Colores cálidos (rojo/amarillo)** → fronteras entre segmentos
-        """)
+        with st.expander("¿Cómo interpretar la U-Matrix del SOM?"):
+            st.markdown("""
+            El Mapa Autoorganizado (SOM) es una red neuronal no supervisada que organiza los clientes en una cuadrícula:
+            - 🔵 **Colores fríos (azul)** → nodos similares entre sí = zonas densas = clústeres.
+            - 🔴 **Colores cálidos (rojo/amarillo)** → mayor distancia entre nodos = fronteras naturales entre segmentos.
+            - Las zonas azules separadas por zonas cálidas confirman la existencia de grupos diferenciados.
+            - Es una validación visual independiente de K-Means y DBSCAN.
+            """)
 
 # ══════════════════════════════════════════════════════════════
 # PREDICCIÓN
