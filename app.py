@@ -360,35 +360,42 @@ elif seccion == "🔮 Predicción":
 
         d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
 
-        # Etiquetas según umbrales exactos del notebook
         if tipo_key == "NATURAL":
+            # Etiqueta
             d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
-            col_y = "segmento_final"
+            y = d["segmento_final"]
+            # Features exactas del notebook para naturales
+            numericas = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
+                         "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
+            categoricas = ["CANAL_REGISTRO", "DEPARTAMENTO", "ANTIGUEDAD",
+                           "DESC_SECTOR", "ESTADO", "TAMAÑO", "FORMAJURIDICA", "SECTOR"]
         else:
-            d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
-            col_y = "segmento_final"
+            # Jurídicos: se elimina EMPRESASUNICAS_CONSULT por correlación 0.98
+            d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
+            y = d["segmento_finaljur"]
+            numericas = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
+                         "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
+            categoricas = ["CANAL_REGISTRO", "DEPARTAMENTO", "ANTIGUEDAD",
+                           "DESC_SECTOR", "ESTADO", "TAMAÑO"]
 
-        # Columnas a excluir del X
-        excluir = {col_y, "TIPO_CLIENTE", "ID", "FECHA_REGISTRO", "FECHA_CLIENTE",
-                   "segmento_final", "segmento_finaljur"}
+        # Filtrar solo columnas que existen
+        numericas   = [c for c in numericas   if c in d.columns]
+        categoricas = [c for c in categoricas if c in d.columns]
+        features    = numericas + categoricas
 
-        # One-Hot Encoding de todas las categóricas — igual al notebook
-        cols_cat = [c for c in d.select_dtypes(include=["object","category"]).columns
-                    if c not in excluir]
-        d_encoded = pd.get_dummies(d, columns=cols_cat, drop_first=False)
+        X = d[features].copy()
 
-        # X: todas las columnas numéricas resultantes excepto las excluidas
-        cols_X = [c for c in d_encoded.columns
-                  if c not in excluir
-                  and d_encoded[c].dtype in ["float64","int64","uint8","bool"]]
+        # One-Hot Encoding igual al notebook — drop_first=True, astype(int)
+        X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
 
-        X = d_encoded[cols_X].fillna(0)
-        y = d[col_y]
+        # Para jurídicos: eliminar EMPRESASUNICAS_CONSULT si quedó
+        if tipo_key == "JURIDICO":
+            cols_drop = [c for c in X_encoded.columns if "EMPRESASUNICAS_CONSULT" in c]
+            X_encoded = X_encoded.drop(columns=cols_drop, errors="ignore")
 
         # Split exacto igual al notebook — sin stratify
-        from sklearn.model_selection import train_test_split
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+            X_encoded, y, test_size=0.2, random_state=42
         )
 
         # Random Forest
@@ -399,12 +406,12 @@ elif seccion == "🔮 Predicción":
 
         # Importancias top 10
         importancias = pd.Series(
-            rf.feature_importances_, index=X.columns
+            rf.feature_importances_, index=X_encoded.columns
         ).sort_values(ascending=False).head(10)
 
         # Logistic Regression con escalado
         from sklearn.preprocessing import StandardScaler as SS
-        scaler2 = SS()
+        scaler2   = SS()
         X_train_sc = scaler2.fit_transform(X_train)
         X_test_sc  = scaler2.transform(X_test)
         lr = LogisticRegression(max_iter=1000, random_state=42)
@@ -412,7 +419,7 @@ elif seccion == "🔮 Predicción":
         y_pred_lr = lr.predict(X_test_sc)
         report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
 
-        return rf, lr, scaler2, X.columns.tolist(), report_rf, report_lr, importancias
+        return rf, lr, scaler2, X_encoded.columns.tolist(), report_rf, report_lr, importancias
 
     rf_model, lr_model, scaler2, feature_cols, report_rf, report_lr, importancias = entrenar_modelos(tipo_key)
 
