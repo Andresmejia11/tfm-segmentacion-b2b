@@ -365,8 +365,8 @@ elif seccion == "🔮 Predicción":
         return modelos
 
     modelos = cargar_modelos()
-    rf_model = modelos[f"rf_{tipo_key.lower()}s"] if tipo_key == "NATURAL" else modelos["rf_juridicos"]
-    lr_model = modelos[f"lr_{tipo_key.lower()}s"] if tipo_key == "NATURAL" else modelos["lr_juridicos"]
+    rf_model = modelos["rf_naturales"] if tipo_key == "NATURAL" else modelos["rf_juridicos"]
+    lr_model = modelos["lr_naturales"] if tipo_key == "NATURAL" else modelos["lr_juridicos"]
 
     # ── Calcular métricas con el modelo cargado ─────────────────
     @st.cache_data(show_spinner="Calculando métricas...")
