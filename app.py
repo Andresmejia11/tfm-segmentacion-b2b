@@ -418,10 +418,70 @@ elif seccion == "🔮 Predicción":
     lr_model = modelos[f"lr_{sufijo}"]
     scaler   = modelos[f"scaler_{sufijo}"]
 
-    # =========================
-    # INPUT USER
-    # =========================
-    st.subheader("🔍 Cliente nuevo")
+    # =========================================================
+    # 1. MÉTRICAS (USANDO TU FUNCIÓN ORIGINAL, NO REDEFINIR)
+    # =========================================================
+    report_rf, report_lr, importancias = calcular_metricas(tipo_key)
+
+    st.markdown("### 📊 Comparación de modelos")
+
+    acc_rf = report_rf["accuracy"]
+    acc_lr = report_lr["accuracy"]
+
+    c1, c2 = st.columns(2)
+    c1.metric("🌲 Random Forest", f"{acc_rf:.0%}")
+    c2.metric("📈 Logistic Regression", f"{acc_lr:.0%}")
+
+    st.markdown("---")
+
+    # =========================================================
+    # 2. MÉTRICAS POR SEGMENTO (TABLA)
+    # =========================================================
+    modelo_sel = st.selectbox(
+        "Ver métricas por segmento:",
+        ["🌲 Random Forest", "📈 Logistic Regression"]
+    )
+
+    report_sel = report_rf if "Random" in modelo_sel else report_lr
+
+    segmentos = ["MUY_BAJO", "BAJO", "MEDIO", "ALTO", "VIP"]
+
+    filas = []
+    for seg in segmentos:
+        if seg in report_sel:
+            r = report_sel[seg]
+            filas.append({
+                "Segmento": seg,
+                "Precisión": f"{r['precision']:.0%}",
+                "Recall": f"{r['recall']:.0%}",
+                "F1-score": f"{r['f1-score']:.0%}",
+                "Soporte": int(r["support"])
+            })
+
+    st.dataframe(pd.DataFrame(filas), use_container_width=True)
+
+    st.markdown("---")
+
+    # =========================================================
+    # 3. IMPORTANCIA VARIABLES
+    # =========================================================
+    st.markdown("### 📌 Variables más importantes")
+
+    fig_imp = go.Figure(go.Bar(
+        x=importancias.values,
+        y=importancias.index,
+        orientation="h"
+    ))
+
+    fig_imp.update_layout(height=400, template="simple_white")
+    st.plotly_chart(fig_imp, use_container_width=True)
+
+    st.markdown("---")
+
+    # =========================================================
+    # 4. PREDICCIÓN INDIVIDUAL (ARREGLADA)
+    # =========================================================
+    st.markdown("### 🔍 Predicción cliente nuevo")
 
     col1, col2 = st.columns(2)
 
@@ -431,40 +491,43 @@ elif seccion == "🔮 Predicción":
         prom_venta = st.number_input("Promedio venta", 0.0, 10000.0, 25.0)
 
     with col2:
+        empresas = st.number_input("Empresas únicas consultadas", 0, 100, 3)
         dias = st.number_input("Días como cliente", 0, 5000, 300)
-        canal = st.selectbox("Canal", ["WEB", "SEM", "Directorios", "Otro"])
-        empresas = st.number_input("Empresas únicas", 0, 100, 3)
+        canal = st.selectbox("Canal registro", ["WEB", "SEM", "Directorios", "Otro"])
 
-    # =========================
-    # DATAFRAME BASE
-    # =========================
-    X_new = pd.DataFrame(columns=rf_model.feature_names_in_)
-    X_new.loc[0] = 0
+    # =========================================================
+    # 5. CONSTRUIR INPUT (RESPETANDO FEATURES REALES)
+    # =========================================================
 
-    # variables numéricas
-    for col in ["NUM_COMPRAS", "NUM_CONSULTAS", "PROMEDIO_VENTA", "DIASCLIENTE"]:
-        if col in X_new.columns:
-            X_new[col] = 0
+    features = FEATURES_NAT if tipo_key == "NATURAL" else FEATURES_JUR
 
-    X_new["NUM_COMPRAS"] = num_compras
-    X_new["NUM_CONSULTAS"] = num_consultas
-    X_new["PROMEDIO_VENTA"] = prom_venta
-    X_new["DIASCLIENTE"] = dias
+    X_new = pd.DataFrame(0, index=[0], columns=features)
+
+    # variables comunes
+    if "NUM_COMPRAS" in X_new:
+        X_new["NUM_COMPRAS"] = num_compras
+    if "NUM_CONSULTAS" in X_new:
+        X_new["NUM_CONSULTAS"] = num_consultas
+    if "PROMEDIO_VENTA" in X_new:
+        X_new["PROMEDIO_VENTA"] = prom_venta
+    if "EMPRESASUNICAS_CONSULT" in X_new:
+        X_new["EMPRESASUNICAS_CONSULT"] = empresas
+    if "DIASCLIENTE" in X_new:
+        X_new["DIASCLIENTE"] = dias
 
     # canal
     canal_col = f"CANAL_REGISTRO_{canal}"
     if canal_col in X_new.columns:
         X_new[canal_col] = 1
 
-    # =========================
-    # PREDICCIÓN RF
-    # =========================
+    # =========================================================
+    # 6. PREDICCIÓN
+    # =========================================================
     pred = rf_model.predict(X_new)[0]
     proba = rf_model.predict_proba(X_new)[0]
 
-    st.markdown(f"## 🧠 Segmento predicho: **{pred}**")
+    st.markdown(f"## 🎯 Segmento predicho: **{pred}**")
 
-    st.write("Probabilidades:")
     for c, p in zip(rf_model.classes_, proba):
         st.write(f"{c}: {p:.2%}")
 # ══════════════════════════════════════════════════════════════
