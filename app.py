@@ -413,28 +413,74 @@ elif seccion == "🔮 Predicción":
     @st.cache_data(show_spinner="Calculando métricas...")
     def calcular_metricas(tipo_key):
         import joblib, requests, io
-        base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
+        base   = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
         sufijo = "naturales" if tipo_key == "NATURAL" else "juridicos"
 
         def cargar_pkl(nombre):
             r = requests.get(base + nombre)
             return joblib.load(io.BytesIO(r.content))
 
-        rf      = cargar_pkl(f"rf_{sufijo}.pkl")
-        lr      = cargar_pkl(f"lr_{sufijo}.pkl")
-        scaler  = cargar_pkl(f"scaler_{sufijo}.pkl")
-        X_test  = cargar_pkl(f"X_test_{sufijo}.pkl")
-        y_test  = cargar_pkl(f"y_test_{sufijo}.pkl")
+        rf     = cargar_pkl(f"rf_{sufijo}.pkl")
+        lr     = cargar_pkl(f"lr_{sufijo}.pkl")
+        scaler = cargar_pkl(f"scaler_{sufijo}.pkl")
 
+        # ── Reproducir pipeline exacto del notebook ──────────
+        d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
+
+        if tipo_key == "NATURAL":
+            # Indicadores de disponibilidad
+            d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
+            d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
+            d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
+            d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
+            # Eliminar EMPRESASUNICAS_CONSULT (correlación 0.99)
+            d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+            # Segmentación
+            d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
+            y = d["segmento_final"]
+            # Features exactas del notebook
+            numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
+                           "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
+                           "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
+            categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
+                           "DESC_SECTOR","ESTADO"]
+        else:
+            # Jurídicos: sin NaN, sin indicadores
+            d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+            d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
+            y = d["segmento_finaljur"]
+            numericas   = ["NUM_COMPRAS","NUM_CONSULTAS",
+                           "DIASCLIENTE","PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
+            categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
+                           "DESC_SECTOR","ESTADO","TAMAÑO"]
+
+        numericas   = [c for c in numericas   if c in d.columns]
+        categoricas = [c for c in categoricas if c in d.columns]
+        X = d[numericas + categoricas].copy()
+
+        # One-Hot Encoding exacto del notebook
+        X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
+
+        # Alinear columnas con las del modelo entrenado
+        X_encoded = X_encoded.reindex(columns=rf.feature_names_in_, fill_value=0)
+
+        # Split exacto del notebook
+        _, X_test, _, y_test = train_test_split(
+            X_encoded, y, test_size=0.2, random_state=42
+        )
+
+        # Métricas RF
         y_pred_rf = rf.predict(X_test)
         report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
 
+        # Métricas LR con scaler original
         X_test_sc = scaler.transform(X_test)
         y_pred_lr = lr.predict(X_test_sc)
         report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
 
+        # Importancias
         importancias = pd.Series(
-            rf.feature_importances_, index=X_test.columns
+            rf.feature_importances_, index=rf.feature_names_in_
         ).sort_values(ascending=False).head(10)
 
         return report_rf, report_lr, importancias
