@@ -404,201 +404,69 @@ elif seccion == "📊 Segmentación":
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
-    tipo = st.radio("Selecciona el tipo de cliente:",
-                    ["🔵 Naturales", "🟣 Jurídicos"], horizontal=True)
-    tipo_key   = "NATURAL" if "Naturales" in tipo else "JURIDICO"
-    color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
-    features   = FEATURES_NAT if tipo_key == "NATURAL" else FEATURES_JUR
 
-    @st.cache_data(show_spinner="Calculando métricas...")
-    def calcular_metricas(tipo_key):
-        import joblib, requests, io
-        base   = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
-        sufijo = "naturales" if tipo_key == "NATURAL" else "juridicos"
+    tipo = st.radio(
+        "Selecciona el tipo de cliente:",
+        ["🔵 Naturales", "🟣 Jurídicos"],
+        horizontal=True
+    )
 
-        def cargar_pkl(nombre):
-            r = requests.get(base + nombre)
-            return joblib.load(io.BytesIO(r.content))
+    tipo_key = "NATURAL" if "Naturales" in tipo else "JURIDICO"
+    sufijo = "naturales" if tipo_key == "NATURAL" else "juridicos"
 
-        rf     = cargar_pkl(f"rf_{sufijo}.pkl")
-        lr     = cargar_pkl(f"lr_{sufijo}.pkl")
-        scaler = cargar_pkl(f"scaler_{sufijo}.pkl")
+    rf_model = modelos[f"rf_{sufijo}"]
+    lr_model = modelos[f"lr_{sufijo}"]
+    scaler   = modelos[f"scaler_{sufijo}"]
 
-        # ── Reproducir pipeline exacto del notebook ──────────
-        d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
+    # =========================
+    # INPUT USER
+    # =========================
+    st.subheader("🔍 Cliente nuevo")
 
-        if tipo_key == "NATURAL":
-            # Indicadores de disponibilidad
-            d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
-            d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
-            d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
-            d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
-            # Eliminar EMPRESASUNICAS_CONSULT (correlación 0.99)
-            d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
-            # Segmentación
-            d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
-            y = d["segmento_final"]
-            # Features exactas del notebook
-            numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                           "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
-                           "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
-            categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                           "DESC_SECTOR","ESTADO"]
-        else:
-            # Jurídicos: sin NaN, sin indicadores
-            d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
-            d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
-            y = d["segmento_finaljur"]
-            numericas   = ["NUM_COMPRAS","NUM_CONSULTAS",
-                           "DIASCLIENTE","PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
-            categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                           "DESC_SECTOR","ESTADO","TAMAÑO"]
-
-        numericas   = [c for c in numericas   if c in d.columns]
-        categoricas = [c for c in categoricas if c in d.columns]
-        X = d[numericas + categoricas].copy()
-
-        # One-Hot Encoding exacto del notebook
-        X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
-
-        # Alinear columnas con las del modelo entrenado
-        X_encoded = X_encoded.reindex(columns=rf.feature_names_in_, fill_value=0)
-
-        # Split exacto del notebook
-        _, X_test, _, y_test = train_test_split(
-            X_encoded, y, test_size=0.2, random_state=42
-        )
-
-        # Métricas RF
-        y_pred_rf = rf.predict(X_test)
-        report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
-
-        # Métricas LR con scaler original
-        X_test_sc = scaler.transform(X_test)
-        y_pred_lr = lr.predict(X_test_sc)
-        report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
-
-        # Importancias
-        importancias = pd.Series(
-            rf.feature_importances_, index=rf.feature_names_in_
-        ).sort_values(ascending=False).head(10)
-
-        return report_rf, report_lr, importancias
-
-    report_rf, report_lr, importancias = calcular_metricas(tipo_key)
-
-    # ── Métricas comparativas ───────────────────────────────
-    st.markdown("### Comparación de modelos")
-    acc_rf = report_rf["accuracy"]
-    acc_lr = report_lr["accuracy"]
     col1, col2 = st.columns(2)
-    col1.metric("🌲 Random Forest · Precisión global", f"{acc_rf:.0%}",
-                delta="Modelo recomendado" if acc_rf > acc_lr else None)
-    col2.metric("📈 Regresión Logística · Precisión global", f"{acc_lr:.0%}")
-    with st.expander("¿Por qué Random Forest es mejor en este caso?"):
-        st.markdown("""
-        - **Random Forest** captura relaciones no lineales, ideal para segmentación de clientes.
-        - **Regresión Logística** asume relaciones lineales, limitando su capacidad en segmentos complejos.
-        - La diferencia es especialmente notable en los segmentos ALTO y VIP.
-        """)
-    st.markdown("---")
 
-    # ── Tabla métricas por segmento ─────────────────────────
-    modelo_sel = st.selectbox("Ver detalle de métricas por segmento:",
-                               ["🌲 Random Forest", "📈 Regresión Logística"])
-    report_sel = report_rf if "Random" in modelo_sel else report_lr
-    segmentos  = ["MUY_BAJO", "BAJO", "MEDIO", "ALTO", "VIP"]
-    filas = []
-    for seg in segmentos:
-        if seg in report_sel:
-            r = report_sel[seg]
-            filas.append({
-                "Segmento":  seg,
-                "Precisión": f"{r['precision']:.0%}",
-                "Recall":    f"{r['recall']:.0%}",
-                "F1-Score":  f"{r['f1-score']:.0%}",
-                "Soporte":   int(r['support'])
-            })
-    st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
-    st.markdown("---")
+    with col1:
+        num_compras = st.number_input("Número de compras", 0, 500, 2)
+        num_consultas = st.number_input("Número de consultas", 0, 1000, 5)
+        prom_venta = st.number_input("Promedio venta", 0.0, 10000.0, 25.0)
 
-    # ── Importancia de variables ────────────────────────────
-    st.markdown("### Variables más importantes · Random Forest")
-    fig_imp = go.Figure(go.Bar(
-        x=importancias.values, y=importancias.index,
-        orientation="h", marker=dict(color=color_tipo)
-    ))
-    fig_imp.update_layout(title=f"Top 10 variables · {tipo_key.title()}",
-        xaxis_title="Importancia", yaxis=dict(autorange="reversed"),
-        template="simple_white", height=400)
-    st.plotly_chart(fig_imp, use_container_width=True)
-    with st.expander("¿Cómo usar estas variables para tomar decisiones?"):
-        st.markdown("""
-        - **PROMEDIO_VENTA alto** → cliente de alto valor. Priorizar fidelización.
-        - **NUM_COMPRAS alto** → cliente recurrente. Ideal para programas de lealtad.
-        - **NUM_CONSULTAS alto** → cliente activo. Oportunidad para ampliar oferta.
+    with col2:
+        dias = st.number_input("Días como cliente", 0, 5000, 300)
+        canal = st.selectbox("Canal", ["WEB", "SEM", "Directorios", "Otro"])
+        empresas = st.number_input("Empresas únicas", 0, 100, 3)
 
-        **Estrategia por segmento:**
-        - 🔴 **MUY_BAJO / BAJO:** campañas de activación y reenganche.
-        - 🟡 **MEDIO:** incentivos para aumentar frecuencia de compra.
-        - 🟢 **ALTO / VIP:** atención prioritaria y gestor dedicado.
-        """)
-    st.markdown("---")
+    # =========================
+    # DATAFRAME BASE
+    # =========================
+    X_new = pd.DataFrame(columns=rf_model.feature_names_in_)
+    X_new.loc[0] = 0
 
-    # ── Predictor individual ────────────────────────────────
-    st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
-    c1, c2 = st.columns(2)
-    with c1:
-        promedio_venta = st.number_input("Promedio por venta (COP)", min_value=0.0, value=25.0, step=5.0)
-        num_compras    = st.number_input("Número de compras",        min_value=0,   value=2,    step=1)
-        num_consultas  = st.number_input("Número de consultas",      min_value=0,   value=5,    step=1)
-    with c2:
-        emp_unicas     = st.number_input("Empresas únicas consultadas", min_value=0, value=3,   step=1)
-        diascliente    = st.number_input("Días como cliente",           min_value=0, value=365, step=30)
-        canal          = st.selectbox("Canal de registro", ["WEB", "SEM", "Directorios", "Otro"])
+    # variables numéricas
+    for col in ["NUM_COMPRAS", "NUM_CONSULTAS", "PROMEDIO_VENTA", "DIASCLIENTE"]:
+        if col in X_new.columns:
+            X_new[col] = 0
 
-    COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
-                   "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
+    X_new["NUM_COMPRAS"] = num_compras
+    X_new["NUM_CONSULTAS"] = num_consultas
+    X_new["PROMEDIO_VENTA"] = prom_venta
+    X_new["DIASCLIENTE"] = dias
 
-    if st.button("🔮 Predecir segmento"):
-        rf_model = modelos[f"rf_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-        X_new    = pd.DataFrame([[0]*len(features)], columns=features)
-        X_new["PROMEDIO_VENTA"]          = promedio_venta
-        X_new["NUM_COMPRAS"]             = num_compras
-        X_new["NUM_CONSULTAS"]           = num_consultas
-        X_new["EMPRESASUNICAS_CONSULT"]  = emp_unicas
-        X_new["DIASCLIENTE"]             = diascliente
-        if canal == "WEB"  and "CANAL_REGISTRO_WEB" in X_new.columns:
-            X_new["CANAL_REGISTRO_WEB"]  = 1
-        if canal == "SEM"  and "CANAL_REGISTRO_SEM" in X_new.columns:
-            X_new["CANAL_REGISTRO_SEM"]  = 1
+    # canal
+    canal_col = f"CANAL_REGISTRO_{canal}"
+    if canal_col in X_new.columns:
+        X_new[canal_col] = 1
 
-        pred  = rf_model.predict(X_new)[0]
-        proba = rf_model.predict_proba(X_new)[0]
-        color = COLORES_SEG.get(pred, "#6366f1")
+    # =========================
+    # PREDICCIÓN RF
+    # =========================
+    pred = rf_model.predict(X_new)[0]
+    proba = rf_model.predict_proba(X_new)[0]
 
-        st.markdown(f"""
-        <div style="background:{color}22;border:2px solid {color};border-radius:12px;
-                    padding:1.5rem;margin-top:1rem;text-align:center">
-            <div style="font-size:13px;color:{color};text-transform:uppercase;
-                        letter-spacing:0.1em;margin-bottom:8px">Segmento predicho</div>
-            <div style="font-size:2.5rem;font-weight:700;color:{color}">{pred}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown(f"## 🧠 Segmento predicho: **{pred}**")
 
-        st.markdown("**Probabilidad por segmento:**")
-        for cls, prob in sorted(zip(rf_model.classes_, proba), key=lambda x: -x[1]):
-            col_c = COLORES_SEG.get(cls, "#6366f1")
-            st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:10px;margin:6px 0">
-                <span style="width:90px;font-size:13px;color:#444">{cls}</span>
-                <div style="flex:1;background:#f0f0f0;border-radius:4px;height:10px">
-                    <div style="width:{prob*100:.1f}%;background:{col_c};height:10px;border-radius:4px"></div>
-                </div>
-                <span style="width:45px;text-align:right;font-size:13px;font-weight:600">{prob:.1%}</span>
-            </div>
-            """, unsafe_allow_html=True)
-
+    st.write("Probabilidades:")
+    for c, p in zip(rf_model.classes_, proba):
+        st.write(f"{c}: {p:.2%}")
 # ══════════════════════════════════════════════════════════════
 # COMPARACIÓN
 # ══════════════════════════════════════════════════════════════
