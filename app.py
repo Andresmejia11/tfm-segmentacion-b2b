@@ -410,6 +410,35 @@ elif seccion == "🔮 Predicción":
     color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
     features   = FEATURES_NAT if tipo_key == "NATURAL" else FEATURES_JUR
 
+    @st.cache_data(show_spinner="Calculando métricas...")
+    def calcular_metricas(tipo_key):
+        import joblib, requests, io
+        base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
+        sufijo = "naturales" if tipo_key == "NATURAL" else "juridicos"
+
+        def cargar_pkl(nombre):
+            r = requests.get(base + nombre)
+            return joblib.load(io.BytesIO(r.content))
+
+        rf      = cargar_pkl(f"rf_{sufijo}.pkl")
+        lr      = cargar_pkl(f"lr_{sufijo}.pkl")
+        scaler  = cargar_pkl(f"scaler_{sufijo}.pkl")
+        X_test  = cargar_pkl(f"X_test_{sufijo}.pkl")
+        y_test  = cargar_pkl(f"y_test_{sufijo}.pkl")
+
+        y_pred_rf = rf.predict(X_test)
+        report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
+
+        X_test_sc = scaler.transform(X_test)
+        y_pred_lr = lr.predict(X_test_sc)
+        report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
+
+        importancias = pd.Series(
+            rf.feature_importances_, index=X_test.columns
+        ).sort_values(ascending=False).head(10)
+
+        return report_rf, report_lr, importancias
+
     report_rf, report_lr, importancias = calcular_metricas(tipo_key)
 
     # ── Métricas comparativas ───────────────────────────────
