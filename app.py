@@ -340,88 +340,91 @@ elif seccion == "🔮 Predicción":
 
     # ── Umbrales exactos del notebook ──────────────────────────
     def segmentar_nat(x):
-        if x <= 15:   return "MUY_BAJO"
-        elif x <= 35: return "BAJO"
-        elif x <= 65: return "MEDIO"
+        if x <= 15:    return "MUY_BAJO"
+        elif x <= 35:  return "BAJO"
+        elif x <= 65:  return "MEDIO"
         elif x <= 105: return "ALTO"
-        else:         return "VIP"
+        else:          return "VIP"
 
     def segmentar_jur(x):
-        if x <= 35:   return "MUY_BAJO"
-        elif x <= 70: return "BAJO"
+        if x <= 35:    return "MUY_BAJO"
+        elif x <= 70:  return "BAJO"
         elif x <= 214: return "MEDIO"
         elif x <= 500: return "ALTO"
-        else:         return "VIP"
+        else:          return "VIP"
 
-    @st.cache_data(show_spinner="Entrenando modelos...")
-    def entrenar_modelos(tipo_key):
+    # ── Cargar modelos desde GitHub (.pkl) ─────────────────────
+    @st.cache_resource(show_spinner="Cargando modelos...")
+    def cargar_modelos():
+        import joblib, requests, io
+        base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
+        modelos = {}
+        for nombre in ["rf_naturales", "lr_naturales", "rf_juridicos", "lr_juridicos"]:
+            r = requests.get(base + nombre + ".pkl")
+            modelos[nombre] = joblib.load(io.BytesIO(r.content))
+        return modelos
+
+    modelos = cargar_modelos()
+    rf_model = modelos[f"rf_{tipo_key.lower()}s"] if tipo_key == "NATURAL" else modelos["rf_juridicos"]
+    lr_model = modelos[f"lr_{tipo_key.lower()}s"] if tipo_key == "NATURAL" else modelos["lr_juridicos"]
+
+    # ── Calcular métricas con el modelo cargado ─────────────────
+    @st.cache_data(show_spinner="Calculando métricas...")
+    def calcular_metricas(tipo_key):
         import warnings
         warnings.filterwarnings("ignore")
 
         d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
 
         if tipo_key == "NATURAL":
-            # Etiqueta
             d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
             y = d["segmento_final"]
-            # Features exactas del notebook para naturales
-            numericas = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
-                         "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
+            numericas   = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
+                           "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
             categoricas = ["CANAL_REGISTRO", "DEPARTAMENTO", "ANTIGUEDAD",
                            "DESC_SECTOR", "ESTADO", "TAMAÑO", "FORMAJURIDICA", "SECTOR"]
         else:
-            # Jurídicos: se elimina EMPRESASUNICAS_CONSULT por correlación 0.98
             d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
             y = d["segmento_finaljur"]
-            numericas = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
-                         "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
+            numericas   = ["NUM_COMPRAS", "NUM_CONSULTAS", "EMPRESASUNICAS_CONSULT",
+                           "DIASCLIENTE", "PROMEDIO_VENTA", "CLIENTEPORCAMPAÑAEMAIL"]
             categoricas = ["CANAL_REGISTRO", "DEPARTAMENTO", "ANTIGUEDAD",
                            "DESC_SECTOR", "ESTADO", "TAMAÑO"]
 
-        # Filtrar solo columnas que existen
         numericas   = [c for c in numericas   if c in d.columns]
         categoricas = [c for c in categoricas if c in d.columns]
-        features    = numericas + categoricas
-
-        X = d[features].copy()
-
-        # One-Hot Encoding igual al notebook — drop_first=True, astype(int)
+        X = d[numericas + categoricas].copy()
         X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
-
-        # Para jurídicos: eliminar EMPRESASUNICAS_CONSULT si quedó
         if tipo_key == "JURIDICO":
             cols_drop = [c for c in X_encoded.columns if "EMPRESASUNICAS_CONSULT" in c]
             X_encoded = X_encoded.drop(columns=cols_drop, errors="ignore")
 
-        # Split exacto igual al notebook — sin stratify
-        X_train, X_test, y_train, y_test = train_test_split(
+        _, X_test, _, y_test = train_test_split(
             X_encoded, y, test_size=0.2, random_state=42
         )
 
-        # Random Forest
-        rf = RandomForestClassifier(random_state=42)
-        rf.fit(X_train, y_train)
-        y_pred_rf = rf.predict(X_test)
-        report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
+        rf  = modelos["rf_naturales" if tipo_key == "NATURAL" else "rf_juridicos"]
+        lr  = modelos["lr_naturales" if tipo_key == "NATURAL" else "lr_juridicos"]
 
-        # Importancias top 10
-        importancias = pd.Series(
-            rf.feature_importances_, index=X_encoded.columns
-        ).sort_values(ascending=False).head(10)
-
-        # Logistic Regression con escalado
+        # Alinear columnas con las que el modelo conoce
+        X_test_rf = X_test.reindex(columns=rf.feature_names_in_, fill_value=0)
         from sklearn.preprocessing import StandardScaler as SS
-        scaler2   = SS()
-        X_train_sc = scaler2.fit_transform(X_train)
-        X_test_sc  = scaler2.transform(X_test)
-        lr = LogisticRegression(max_iter=1000, random_state=42)
-        lr.fit(X_train_sc, y_train)
+        scaler2    = SS()
+        X_test_sc  = scaler2.fit_transform(X_test_rf)
+
+        y_pred_rf = rf.predict(X_test_rf)
         y_pred_lr = lr.predict(X_test_sc)
+
+        report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
         report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
 
-        return rf, lr, scaler2, X_encoded.columns.tolist(), report_rf, report_lr, importancias
+        importancias = pd.Series(
+            rf.feature_importances_, index=rf.feature_names_in_
+        ).sort_values(ascending=False).head(10)
 
-    rf_model, lr_model, scaler2, feature_cols, report_rf, report_lr, importancias = entrenar_modelos(tipo_key)
+        return report_rf, report_lr, importancias, X_encoded.columns.tolist()
+
+    report_rf, report_lr, importancias, feature_cols = calcular_metricas(tipo_key)
 
     # ── Resultados exactos del notebook (hardcoded) ────────────
     RESULTADOS = {
