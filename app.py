@@ -95,61 +95,110 @@ modelos = cargar_modelos()
 def calcular_metricas(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
 
+    # ─────────────────────────────────────────────
+    # PIPELINE EXACTO NOTEBOOK - NATURALES
+    # ─────────────────────────────────────────────
     if tipo_key == "NATURAL":
-        # Indicadores de disponibilidad — igual al notebook
-        d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
+
+        d["TIENE_DEPTO"] = d["DEPARTAMENTO"].notna().astype(int)
         d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
-        d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
-        d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
-        # Eliminar EMPRESASUNICAS_CONSULT (correlación 0.99)
+
+        d["DEPARTAMENTO"] = d["DEPARTAMENTO"].fillna("NO_APLICA")
+        d["ANTIGUEDAD"] = d["ANTIGUEDAD"].fillna("NO_APLICA")
+
+        # correlación alta eliminada en notebook
         d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+
         d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
         y = d["segmento_final"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
-                       "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO"]
+
+        numericas = [
+            "NUM_COMPRAS",
+            "NUM_CONSULTAS",
+            "DIASCLIENTE",
+            "PROMEDIO_VENTA",
+            "CLIENTEPORCAMPAÑAEMAIL",
+            "TIENE_DEPTO",
+            "TIENE_ANTIGUEDAD"
+        ]
+
+        categoricas = [
+            "CANAL_REGISTRO",
+            "DEPARTAMENTO",
+            "ANTIGUEDAD",
+            "DESC_SECTOR",
+            "ESTADO"
+        ]
+
+    # ─────────────────────────────────────────────
+    # PIPELINE EXACTO NOTEBOOK - JURÍDICOS
+    # ─────────────────────────────────────────────
     else:
-        # Jurídicos: sin NaN, sin indicadores
+
         d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+
         d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
         y = d["segmento_finaljur"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO","TAMAÑO"]
 
-    numericas   = [c for c in numericas   if c in d.columns]
+        numericas = [
+            "NUM_COMPRAS",
+            "NUM_CONSULTAS",
+            "DIASCLIENTE",
+            "PROMEDIO_VENTA",
+            "CLIENTEPORCAMPAÑAEMAIL"
+        ]
+
+        categoricas = [
+            "CANAL_REGISTRO",
+            "DEPARTAMENTO",
+            "ANTIGUEDAD",
+            "DESC_SECTOR",
+            "ESTADO",
+            "TAMAÑO"
+        ]
+
+    # ─────────────────────────────────────────────
+    # FEATURE ENGINEERING
+    # ─────────────────────────────────────────────
+    numericas = [c for c in numericas if c in d.columns]
     categoricas = [c for c in categoricas if c in d.columns]
+
     X = d[numericas + categoricas].copy()
     X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
 
-    rf     = modelos[f"rf_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-    lr     = modelos[f"lr_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
+    # ─────────────────────────────────────────────
+    # MODELOS
+    # ─────────────────────────────────────────────
+    rf = modelos[f"rf_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
+    lr = modelos[f"lr_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
     scaler = modelos[f"scaler_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
 
-    # Alinear columnas con el modelo entrenado
+    # 🔥 FIX CRÍTICO: alineación exacta con entrenamiento
     X_encoded = X_encoded.reindex(columns=rf.feature_names_in_, fill_value=0)
 
-    # Split exacto del notebook — sin stratify
+    # ─────────────────────────────────────────────
+    # SPLIT IGUAL NOTEBOOK
+    # ─────────────────────────────────────────────
     _, X_test, _, y_test = train_test_split(
         X_encoded, y, test_size=0.2, random_state=42
     )
 
+    # RF
     y_pred_rf = rf.predict(X_test)
     report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
 
+    # LR
     X_test_sc = scaler.transform(X_test)
     y_pred_lr = lr.predict(X_test_sc)
     report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
 
+    # importancias
     importancias = pd.Series(
-        rf.feature_importances_, index=rf.feature_names_in_
+        rf.feature_importances_,
+        index=rf.feature_names_in_
     ).sort_values(ascending=False).head(10)
 
     return report_rf, report_lr, importancias
-
 # ── Pipeline clustering ────────────────────────────────────
 @st.cache_data(show_spinner="Calculando clusters...")
 def calcular_clusters(tipo_key):
