@@ -469,32 +469,54 @@ elif seccion == "🔮 Predicción":
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
     if st.button("🔮 Predecir segmento"):
-        # Construir diccionario con los valores ingresados
-        datos = {
-            "NUM_COMPRAS":            num_compras,
-            "NUM_CONSULTAS":          num_consultas,
-            "DIASCLIENTE":            diascliente,
-            "PROMEDIO_VENTA":         promedio_venta,
-            "CLIENTEPORCAMPAÑAEMAIL": 1 if "Sí" in email_campana else 0,
-            "CANAL_REGISTRO":         canal if canal != "Otro" else "Directorios",
-            "DEPARTAMENTO":           departamento,
-            "ANTIGUEDAD":             antiguedad,
-            "DESC_SECTOR":            sector,
-            "ESTADO":                 estado,
-        }
+        # Crear vector con todas las columnas del modelo en cero
+        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
+
+        # Asignar valores numéricos directamente
+        X_new["PROMEDIO_VENTA"]         = promedio_venta
+        X_new["NUM_COMPRAS"]            = num_compras
+        X_new["NUM_CONSULTAS"]          = num_consultas
+        X_new["DIASCLIENTE"]            = diascliente
+        X_new["CLIENTEPORCAMPAÑAEMAIL"] = 1 if "Sí" in email_campana else 0
+
         if tipo_key == "NATURAL":
-            datos["TIENE_DEPTO"]      = 0 if departamento == "NO_APLICA" else 1
-            datos["TIENE_ANTIGUEDAD"] = 0 if antiguedad   == "NO_APLICA" else 1
-        else:
-            datos["TAMAÑO"] = tamanio
+            X_new["TIENE_DEPTO"]      = 0 if departamento == "NO_APLICA" else 1
+            X_new["TIENE_ANTIGUEDAD"] = 0 if antiguedad   == "NO_APLICA" else 1
 
-        # One-Hot igual al notebook
-        df_nuevo = pd.DataFrame([datos])
-        df_nuevo_enc = pd.get_dummies(df_nuevo, drop_first=True).astype(int)
-        df_nuevo_enc = df_nuevo_enc.reindex(columns=feature_cols, fill_value=0)
+        # Canal de registro
+        if canal == "WEB"  and "CANAL_REGISTRO_WEB" in X_new.columns:
+            X_new["CANAL_REGISTRO_WEB"] = 1
+        elif canal == "SEM" and "CANAL_REGISTRO_SEM" in X_new.columns:
+            X_new["CANAL_REGISTRO_SEM"] = 1
 
-        pred  = rf_model.predict(df_nuevo_enc)[0]
-        proba = rf_model.predict_proba(df_nuevo_enc)[0]
+        # Departamento
+        col_depto = f"DEPARTAMENTO_{departamento}"
+        if col_depto in X_new.columns:
+            X_new[col_depto] = 1
+
+        # Antigüedad
+        col_ant = f"ANTIGUEDAD_{antiguedad}"
+        if col_ant in X_new.columns:
+            X_new[col_ant] = 1
+
+        # Sector
+        col_sector = f"DESC_SECTOR_{sector}"
+        if col_sector in X_new.columns:
+            X_new[col_sector] = 1
+
+        # Estado
+        col_estado = f"ESTADO_{estado}"
+        if col_estado in X_new.columns:
+            X_new[col_estado] = 1
+
+        # Tamaño (solo jurídicos)
+        if tipo_key == "JURIDICO":
+            col_tam = f"TAMAÑO_{tamanio}"
+            if col_tam in X_new.columns:
+                X_new[col_tam] = 1
+
+        pred  = rf_model.predict(X_new)[0]
+        proba = rf_model.predict_proba(X_new)[0]
         color = COLORES_SEG.get(pred, "#6366f1")
 
         st.markdown(f"""
