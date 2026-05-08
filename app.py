@@ -14,7 +14,7 @@ from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Funciones de segmentación (globales) ───────────────────
+# ── Funciones de segmentación ──────────────────────────────
 def segmentar_nat(x):
     if x <= 15:    return "MUY_BAJO"
     elif x <= 35:  return "BAJO"
@@ -73,83 +73,6 @@ df = procesar_datos(clientes, ventas, consultas)
 
 VARS = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
 
-# ── Cargar modelos pkl ─────────────────────────────────────
-@st.cache_resource(show_spinner="Cargando modelos...")
-def cargar_modelos():
-    import joblib, requests, io
-    base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
-    modelos = {}
-    for nombre in ["rf_naturales","lr_naturales","scaler_naturales",
-                   "rf_juridicos","lr_juridicos","scaler_juridicos"]:
-        try:
-            r = requests.get(base + nombre + ".pkl")
-            modelos[nombre] = joblib.load(io.BytesIO(r.content))
-        except:
-            modelos[nombre] = None
-    return modelos
-
-modelos = cargar_modelos()
-
-# ── Calcular métricas con pipeline exacto del notebook ─────
-@st.cache_data(show_spinner="Calculando métricas...")
-def calcular_metricas(tipo_key):
-    d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
-
-    if tipo_key == "NATURAL":
-        # Indicadores de disponibilidad — igual al notebook
-        d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
-        d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
-        d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
-        d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
-        # Eliminar EMPRESASUNICAS_CONSULT (correlación 0.99)
-        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
-        d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
-        y = d["segmento_final"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
-                       "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO"]
-    else:
-        # Jurídicos: sin NaN, sin indicadores
-        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
-        d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
-        y = d["segmento_finaljur"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO","TAMAÑO"]
-
-    numericas   = [c for c in numericas   if c in d.columns]
-    categoricas = [c for c in categoricas if c in d.columns]
-    X = d[numericas + categoricas].copy()
-    X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
-
-    rf     = modelos[f"rf_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-    lr     = modelos[f"lr_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-    scaler = modelos[f"scaler_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-
-    # Alinear columnas con el modelo entrenado
-    X_encoded = X_encoded.reindex(columns=rf.feature_names_in_, fill_value=0)
-
-    # Split exacto del notebook — sin stratify
-    _, X_test, _, y_test = train_test_split(
-        X_encoded, y, test_size=0.2, random_state=42
-    )
-
-    y_pred_rf = rf.predict(X_test)
-    report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
-
-    X_test_sc = scaler.transform(X_test)
-    y_pred_lr = lr.predict(X_test_sc)
-    report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
-
-    importancias = pd.Series(
-        rf.feature_importances_, index=rf.feature_names_in_
-    ).sort_values(ascending=False).head(10)
-
-    return report_rf, report_lr, importancias
-
 # ── Pipeline clustering ────────────────────────────────────
 @st.cache_data(show_spinner="Calculando clusters...")
 def calcular_clusters(tipo_key):
@@ -175,6 +98,63 @@ def calcular_clusters(tipo_key):
     d["PC1"] = X_pca[:, 0]
     d["PC2"] = X_pca[:, 1]
     return d, X_scaled, pca.explained_variance_ratio_
+
+# ── Pipeline predicción ────────────────────────────────────
+@st.cache_data(show_spinner="Entrenando modelos...")
+def calcular_metricas(tipo_key):
+    d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
+
+    if tipo_key == "NATURAL":
+        d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
+        d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
+        d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
+        d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
+        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+        d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
+        y = d["segmento_final"]
+        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
+                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
+                       "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
+        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
+                       "DESC_SECTOR","ESTADO"]
+    else:
+        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+        d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
+        y = d["segmento_finaljur"]
+        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
+                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
+        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
+                       "DESC_SECTOR","ESTADO","TAMAÑO"]
+
+    numericas   = [c for c in numericas   if c in d.columns]
+    categoricas = [c for c in categoricas if c in d.columns]
+    X = d[numericas + categoricas].copy()
+    X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_encoded, y, test_size=0.2, random_state=42
+    )
+
+    # Random Forest
+    rf = RandomForestClassifier(random_state=42)
+    rf.fit(X_train, y_train)
+    y_pred_rf = rf.predict(X_test)
+    report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
+
+    importancias = pd.Series(
+        rf.feature_importances_, index=X_encoded.columns
+    ).sort_values(ascending=False).head(10)
+
+    # Logistic Regression
+    scaler2    = StandardScaler()
+    X_train_sc = scaler2.fit_transform(X_train)
+    X_test_sc  = scaler2.transform(X_test)
+    lr = LogisticRegression(max_iter=1000, random_state=42)
+    lr.fit(X_train_sc, y_train)
+    y_pred_lr = lr.predict(X_test_sc)
+    report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
+
+    return rf, lr, scaler2, X_encoded.columns.tolist(), report_rf, report_lr, importancias
 
 NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
 COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
@@ -249,7 +229,7 @@ elif seccion == "📊 Segmentación":
         st.markdown("---")
         st.markdown("**Tabla completa de promedios**")
         st.dataframe(perfil.set_index("Segmento").round(2), use_container_width=True)
-        st.markdown("**Distribución de clientes por segmento**")
+        st.markdown("**Distribución por segmento**")
         conteo = df_seg["Segmento"].value_counts().reset_index()
         conteo.columns = ["Segmento", "Clientes"]
         fig = px.bar(conteo, x="Segmento", y="Clientes", color="Segmento",
@@ -378,7 +358,7 @@ elif seccion == "🔮 Predicción":
     tipo_key   = "NATURAL" if "Naturales" in tipo else "JURIDICO"
     color_tipo = "mediumslateblue" if tipo_key == "NATURAL" else "darkorange"
 
-    report_rf, report_lr, importancias = calcular_metricas(tipo_key)
+    rf_model, lr_model, scaler2, feature_cols, report_rf, report_lr, importancias = calcular_metricas(tipo_key)
 
     st.markdown("### Comparación de modelos")
     acc_rf = report_rf["accuracy"]
@@ -390,7 +370,7 @@ elif seccion == "🔮 Predicción":
     with st.expander("¿Por qué Random Forest es mejor?"):
         st.markdown("""
         - **Random Forest** captura relaciones no lineales, ideal para segmentación.
-        - **Regresión Logística** asume relaciones lineales, limitando su desempeño en segmentos complejos.
+        - **Regresión Logística** asume relaciones lineales, limitando su desempeño.
         - La diferencia es especialmente notable en los segmentos ALTO y VIP.
         """)
     st.markdown("---")
@@ -436,8 +416,6 @@ elif seccion == "🔮 Predicción":
     st.markdown("---")
 
     st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
-    rf_model = modelos[f"rf_{'naturales' if tipo_key == 'NATURAL' else 'juridicos'}"]
-
     c1, c2 = st.columns(2)
     with c1:
         promedio_venta = st.number_input("Promedio por venta (COP)", min_value=0.0, value=25.0, step=5.0)
@@ -447,18 +425,17 @@ elif seccion == "🔮 Predicción":
         diascliente    = st.number_input("Días como cliente",        min_value=0,   value=365,  step=30)
         canal          = st.selectbox("Canal de registro", ["WEB", "SEM", "Directorios", "Otro"])
         if tipo_key == "NATURAL":
-            tiene_depto = st.selectbox("¿Tiene departamento?", ["Sí", "No"])
+            tiene_depto = st.selectbox("¿Tiene departamento registrado?", ["Sí", "No"])
 
     COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
     if st.button("🔮 Predecir segmento"):
-        features = rf_model.feature_names_in_
-        X_new    = pd.DataFrame([[0]*len(features)], columns=features)
-        X_new["PROMEDIO_VENTA"]   = promedio_venta
-        X_new["NUM_COMPRAS"]      = num_compras
-        X_new["NUM_CONSULTAS"]    = num_consultas
-        X_new["DIASCLIENTE"]      = diascliente
+        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
+        X_new["PROMEDIO_VENTA"] = promedio_venta
+        X_new["NUM_COMPRAS"]    = num_compras
+        X_new["NUM_CONSULTAS"]  = num_consultas
+        X_new["DIASCLIENTE"]    = diascliente
         if "CANAL_REGISTRO_WEB" in X_new.columns and canal == "WEB":
             X_new["CANAL_REGISTRO_WEB"] = 1
         if "CANAL_REGISTRO_SEM" in X_new.columns and canal == "SEM":
