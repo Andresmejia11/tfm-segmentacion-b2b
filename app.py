@@ -416,38 +416,85 @@ elif seccion == "🔮 Predicción":
     st.markdown("---")
 
     st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
+
+    DEPARTAMENTOS = ["BOGOTA","CUNDINAMARCA","ANTIOQUIA","VALLE","ATLANTICO",
+                     "SANTANDER","BOLIVAR","TOLIMA","CALDAS","RISARALDA",
+                     "QUINDIO","BOYACA","HUILA","NARINO","CAUCA","META",
+                     "CESAR","MAGDALENA","CORDOBA","SUCRE","NORTE SANTANDER",
+                     "LA GUAJIRA","CASANARE","PUTUMAYO","CAQUETA",
+                     "SAN ANDRES","FUERA DEL PAIS","NO_APLICA"]
+
+    SECTORES = [
+        "COMERCIO AL POR MAYOR Y AL POR MENOR; REPARACIÓN DE VEHÍCULOS AUTOMOTORES Y MOTOCICLETAS",
+        "ACTIVIDADES PROFESIONALES, CIENTÍFICAS Y TÉCNICAS",
+        "ACTIVIDADES FINANCIERAS Y DE SEGUROS",
+        "INDUSTRIAS MANUFACTURERAS",
+        "CONSTRUCCIÓN",
+        "TRANSPORTE Y ALMACENAMIENTO",
+        "INFORMACIÓN Y COMUNICACIONES",
+        "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
+        "EDUCACIÓN",
+        "ACTIVIDADES INMOBILIARIAS",
+        "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
+        "AGRICULTURA, GANADERÍA, CAZA, SILVICULTURA Y PESCA",
+        "ALOJAMIENTO Y SERVICIOS DE COMIDA",
+        "OTRAS ACTIVIDADES DE SERVICIOS",
+        "ADMINISTRACIÓN PÚBLICA Y DEFENSA; PLANES DE SEGURIDAD SOCIAL DE AFILIACIÓN OBLIGATORIA",
+        "EXPLOTACIÓN DE MINAS Y CANTERAS",
+        "SUMINISTRO DE ELECTRICIDAD, GAS, VAPOR Y AIRE ACONDICIONADO",
+        "DISTRIBUCIÓN DE AGUA; EVACUACIÓN Y TRATAMIENTO DE AGUAS RESIDUALES, GESTIÓN DE DESECHOS Y ACTIVIDADES DE SANEAMIENTO AMBIENTAL",
+        "NOSECTOR"
+    ]
+
+    ANTIGUEDADES = ["Menos de 3 Meses","De 3 a 18 Meses","De 3 a 5 Años",
+                    "De 5 a 10 Años","Más de 10 Años","SIN FECHA DE CONSTITUCION","NO_APLICA"]
+
     c1, c2 = st.columns(2)
     with c1:
-        promedio_venta = st.number_input("Promedio por venta (COP)", min_value=0.0, value=25.0, step=5.0)
-        num_compras    = st.number_input("Número de compras",        min_value=0,   value=2,    step=1)
-        num_consultas  = st.number_input("Número de consultas",      min_value=0,   value=5,    step=1)
+        promedio_venta  = st.number_input("Promedio por venta (COP)",    min_value=0.0, value=25.0,  step=5.0)
+        num_compras     = st.number_input("Número de compras",            min_value=0,   value=2,     step=1)
+        num_consultas   = st.number_input("Número de consultas",          min_value=0,   value=5,     step=1)
+        diascliente     = st.number_input("Días como cliente",            min_value=0,   value=365,   step=30)
+        email_campana   = st.selectbox("¿Cliente por campaña email?",     ["No (0)","Sí (1)"])
     with c2:
-        diascliente    = st.number_input("Días como cliente",        min_value=0,   value=365,  step=30)
-        canal          = st.selectbox("Canal de registro", ["WEB", "SEM", "Directorios", "Otro"])
-        if tipo_key == "NATURAL":
-            tiene_depto = st.selectbox("¿Tiene departamento registrado?", ["Sí", "No"])
+        canal           = st.selectbox("Canal de registro",               ["WEB","SEM","Directorios","Otro"])
+        departamento    = st.selectbox("Departamento",                     DEPARTAMENTOS)
+        antiguedad      = st.selectbox("Antigüedad",                       ANTIGUEDADES)
+        sector          = st.selectbox("Sector económico",                 SECTORES)
+        estado          = st.selectbox("Estado",                           ["ACTIVA","INACTIVA","EXTINGUIDA","INSOLVENTE","VIVA"])
+        if tipo_key == "JURIDICO":
+            tamanio     = st.selectbox("Tamaño empresa",                   ["MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
 
     COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
     if st.button("🔮 Predecir segmento"):
-        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
-        X_new["PROMEDIO_VENTA"] = promedio_venta
-        X_new["NUM_COMPRAS"]    = num_compras
-        X_new["NUM_CONSULTAS"]  = num_consultas
-        X_new["DIASCLIENTE"]    = diascliente
-        if "CANAL_REGISTRO_WEB" in X_new.columns and canal == "WEB":
-            X_new["CANAL_REGISTRO_WEB"] = 1
-        if "CANAL_REGISTRO_SEM" in X_new.columns and canal == "SEM":
-            X_new["CANAL_REGISTRO_SEM"] = 1
+        # Construir diccionario con los valores ingresados
+        datos = {
+            "NUM_COMPRAS":            num_compras,
+            "NUM_CONSULTAS":          num_consultas,
+            "DIASCLIENTE":            diascliente,
+            "PROMEDIO_VENTA":         promedio_venta,
+            "CLIENTEPORCAMPAÑAEMAIL": 1 if "Sí" in email_campana else 0,
+            "CANAL_REGISTRO":         canal if canal != "Otro" else "Directorios",
+            "DEPARTAMENTO":           departamento,
+            "ANTIGUEDAD":             antiguedad,
+            "DESC_SECTOR":            sector,
+            "ESTADO":                 estado,
+        }
         if tipo_key == "NATURAL":
-            if "TIENE_DEPTO" in X_new.columns:
-                X_new["TIENE_DEPTO"]      = 1 if tiene_depto == "Sí" else 0
-            if "TIENE_ANTIGUEDAD" in X_new.columns:
-                X_new["TIENE_ANTIGUEDAD"] = 1 if tiene_depto == "Sí" else 0
+            datos["TIENE_DEPTO"]      = 0 if departamento == "NO_APLICA" else 1
+            datos["TIENE_ANTIGUEDAD"] = 0 if antiguedad   == "NO_APLICA" else 1
+        else:
+            datos["TAMAÑO"] = tamanio
 
-        pred  = rf_model.predict(X_new)[0]
-        proba = rf_model.predict_proba(X_new)[0]
+        # One-Hot igual al notebook
+        df_nuevo = pd.DataFrame([datos])
+        df_nuevo_enc = pd.get_dummies(df_nuevo, drop_first=True).astype(int)
+        df_nuevo_enc = df_nuevo_enc.reindex(columns=feature_cols, fill_value=0)
+
+        pred  = rf_model.predict(df_nuevo_enc)[0]
+        proba = rf_model.predict_proba(df_nuevo_enc)[0]
         color = COLORES_SEG.get(pred, "#6366f1")
 
         st.markdown(f"""
