@@ -417,37 +417,59 @@ elif seccion == "🔮 Predicción":
 
     st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
 
-    DEPARTAMENTOS = ["BOGOTA","CUNDINAMARCA","ANTIOQUIA","VALLE","ATLANTICO",
-                     "SANTANDER","BOLIVAR","TOLIMA","CALDAS","RISARALDA",
-                     "QUINDIO","BOYACA","HUILA","NARINO","CAUCA","META",
-                     "CESAR","MAGDALENA","CORDOBA","SUCRE","NORTE SANTANDER",
-                     "LA GUAJIRA","CASANARE","PUTUMAYO","CAQUETA",
-                     "SAN ANDRES","FUERA DEL PAIS","NO_APLICA"]
-
-    SECTORES = [
-        "COMERCIO AL POR MAYOR Y AL POR MENOR; REPARACIÓN DE VEHÍCULOS AUTOMOTORES Y MOTOCICLETAS",
-        "ACTIVIDADES PROFESIONALES, CIENTÍFICAS Y TÉCNICAS",
-        "ACTIVIDADES FINANCIERAS Y DE SEGUROS",
-        "INDUSTRIAS MANUFACTURERAS",
-        "CONSTRUCCIÓN",
-        "TRANSPORTE Y ALMACENAMIENTO",
-        "INFORMACIÓN Y COMUNICACIONES",
-        "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
-        "EDUCACIÓN",
-        "ACTIVIDADES INMOBILIARIAS",
-        "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
-        "AGRICULTURA, GANADERÍA, CAZA, SILVICULTURA Y PESCA",
-        "ALOJAMIENTO Y SERVICIOS DE COMIDA",
-        "OTRAS ACTIVIDADES DE SERVICIOS",
-        "ADMINISTRACIÓN PÚBLICA Y DEFENSA; PLANES DE SEGURIDAD SOCIAL DE AFILIACIÓN OBLIGATORIA",
-        "EXPLOTACIÓN DE MINAS Y CANTERAS",
-        "SUMINISTRO DE ELECTRICIDAD, GAS, VAPOR Y AIRE ACONDICIONADO",
-        "DISTRIBUCIÓN DE AGUA; EVACUACIÓN Y TRATAMIENTO DE AGUAS RESIDUALES, GESTIÓN DE DESECHOS Y ACTIVIDADES DE SANEAMIENTO AMBIENTAL",
-        "NOSECTOR"
-    ]
-
-    ANTIGUEDADES = ["Menos de 3 Meses","De 3 a 18 Meses","De 3 a 5 Años",
-                    "De 5 a 10 Años","Más de 10 Años","SIN FECHA DE CONSTITUCION","NO_APLICA"]
+    # Columnas exactas por tipo — extraídas directamente del notebook
+    if tipo_key == "NATURAL":
+        DEPARTAMENTOS = ["NO_APLICA","ANTIOQUIA","ARAUCA","ATLANTICO","BOGOTA",
+                         "BOLIVAR","BOYACA","CALDAS","CAQUETA","CASANARE","CAUCA",
+                         "CESAR","CHOCO","CORDOBA","CUNDINAMARCA","GUAVIARE","HUILA",
+                         "LA GUAJIRA","MAGDALENA","META","NARINO","NORTE SANTANDER",
+                         "PUTUMAYO","QUINDIO","RISARALDA","SAN ANDRES","SANTANDER",
+                         "SUCRE","TOLIMA","VALLE"]
+        SECTORES = ["NOSECTOR",
+            "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
+            "ACTIVIDADES DE LOS HOGARES INDIVIDUALES EN CALIDAD DE EMPLEADORES; ACTIVIDADES NO DIFERENCIADAS DE LOS HOGARES INDIVIDUALES COMO PRODUCTORES DE BIENES Y SERVICIOS PARA USO PROPIO",
+            "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
+            "ACTIVIDADES FINANCIERAS Y DE SEGUROS","ACTIVIDADES INMOBILIARIAS",
+            "ACTIVIDADES PROFESIONALES, CIENTÍFICAS Y TÉCNICAS",
+            "ADMINISTRACIÓN PÚBLICA Y DEFENSA; PLANES DE SEGURIDAD SOCIAL DE AFILIACIÓN OBLIGATORIA",
+            "AGRICULTURA, GANADERÍA, CAZA, SILVICULTURA Y PESCA",
+            "ALOJAMIENTO Y SERVICIOS DE COMIDA","COMERCIAL / INDUSTRIAL NO DEFINIDA",
+            "COMERCIO AL POR MAYOR Y AL POR MENOR; REPARACIÓN DE VEHÍCULOS AUTOMOTORES Y MOTOCICLETAS",
+            "CONSTRUCCIÓN",
+            "DISTRIBUCIÓN DE AGUA; EVACUACIÓN Y TRATAMIENTO DE AGUAS RESIDUALES, GESTIÓN DE DESECHOS Y ACTIVIDADES DE SANEAMIENTO AMBIENTAL",
+            "EDUCACIÓN","EXPLOTACIÓN DE MINAS Y CANTERAS","INDUSTRIAS MANUFACTURERAS",
+            "INFORMACIÓN Y COMUNICACIONES","OTRAS ACTIVIDADES DE SERVICIOS",
+            "TRANSPORTE Y ALMACENAMIENTO"]
+        ESTADOS    = ["ACTIVA","INACTIVA","INSOLVENTE","VIVA"]
+        ANTIGUEDADES = ["NO_APLICA","Menos de 3 Meses","De 3 a 18 Meses",
+                        "De 3 a 5 Años","De 5 a 10 Años","Más de 10 Años",
+                        "SIN FECHA DE CONSTITUCION"]
+    else:
+        DEPARTAMENTOS = ["ATLANTICO","BOGOTA","BOLIVAR","BOYACA","CALDAS",
+                         "CAQUETA","CASANARE","CAUCA","CESAR","CORDOBA",
+                         "CUNDINAMARCA","FUERA DEL PAIS","HUILA","LA GUAJIRA",
+                         "MAGDALENA","META","NARINO","NORTE SANTANDER","PUTUMAYO",
+                         "QUINDIO","RISARALDA","SAN ANDRES","SANTANDER","SUCRE",
+                         "TOLIMA","VALLE"]
+        SECTORES = [
+            "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
+            "ACTIVIDADES DE LOS HOGARES INDIVIDUALES EN CALIDAD DE EMPLEADORES; ACTIVIDADES NO DIFERENCIADAS DE LOS HOGARES INDIVIDUALES COMO PRODUCTORES DE BIENES Y SERVICIOS PARA USO PROPIO",
+            "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
+            "ACTIVIDADES FINANCIERAS Y DE SEGUROS","ACTIVIDADES INMOBILIARIAS",
+            "ACTIVIDADES PROFESIONALES, CIENTÍFICAS Y TÉCNICAS",
+            "ADMINISTRACIÓN PÚBLICA Y DEFENSA; PLANES DE SEGURIDAD SOCIAL DE AFILIACIÓN OBLIGATORIA",
+            "AGRICULTURA, GANADERÍA, CAZA, SILVICULTURA Y PESCA",
+            "ALOJAMIENTO Y SERVICIOS DE COMIDA",
+            "COMERCIO AL POR MAYOR Y AL POR MENOR; REPARACIÓN DE VEHÍCULOS AUTOMOTORES Y MOTOCICLETAS",
+            "CONSTRUCCIÓN",
+            "DISTRIBUCIÓN DE AGUA; EVACUACIÓN Y TRATAMIENTO DE AGUAS RESIDUALES, GESTIÓN DE DESECHOS Y ACTIVIDADES DE SANEAMIENTO AMBIENTAL",
+            "EDUCACIÓN","EXPLOTACIÓN DE MINAS Y CANTERAS","INDUSTRIAS MANUFACTURERAS",
+            "INFORMACIÓN Y COMUNICACIONES","OTRAS ACTIVIDADES DE SERVICIOS",
+            "SUMINISTRO DE ELECTRICIDAD, GAS, VAPOR Y AIRE ACONDICIONADO",
+            "TRANSPORTE Y ALMACENAMIENTO"]
+        ESTADOS    = ["ACTIVA","INACTIVA","INSOLVENTE","EXTINGUIDA"]
+        ANTIGUEDADES = ["De 3 a 18 Meses","De 3 a 5 Años","De 5 a 10 Años",
+                        "Más de 10 Años","SIN FECHA DE CONSTITUCION"]
 
     c1, c2 = st.columns(2)
     with c1:
@@ -457,13 +479,15 @@ elif seccion == "🔮 Predicción":
         diascliente     = st.number_input("Días como cliente",            min_value=0,   value=365,   step=30)
         email_campana   = st.selectbox("¿Cliente por campaña email?",     ["No (0)","Sí (1)"])
     with c2:
-        canal           = st.selectbox("Canal de registro",               ["WEB","SEM","Directorios","Otro"])
-        departamento    = st.selectbox("Departamento",                     DEPARTAMENTOS)
-        antiguedad      = st.selectbox("Antigüedad",                       ANTIGUEDADES)
-        sector          = st.selectbox("Sector económico",                 SECTORES)
-        estado          = st.selectbox("Estado",                           ["ACTIVA","INACTIVA","EXTINGUIDA","INSOLVENTE","VIVA"])
+        canal           = st.selectbox("Canal de registro",  ["WEB","SEM","Directorios","Otro"])
+        departamento    = st.selectbox("Departamento",         DEPARTAMENTOS)
+        antiguedad      = st.selectbox("Antigüedad",           ANTIGUEDADES)
+        sector          = st.selectbox("Sector económico",     SECTORES)
+        estado          = st.selectbox("Estado",               ESTADOS)
         if tipo_key == "JURIDICO":
-            tamanio     = st.selectbox("Tamaño empresa",                   ["MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
+            tamanio     = st.selectbox("Tamaño empresa",       ["MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
+        if tipo_key == "NATURAL":
+            emp_unicas  = st.number_input("Empresas únicas consultadas", min_value=0, value=3, step=1)
 
     COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
@@ -480,8 +504,9 @@ elif seccion == "🔮 Predicción":
         X_new["CLIENTEPORCAMPAÑAEMAIL"] = 1 if "Sí" in email_campana else 0
 
         if tipo_key == "NATURAL":
-            X_new["TIENE_DEPTO"]      = 0 if departamento == "NO_APLICA" else 1
-            X_new["TIENE_ANTIGUEDAD"] = 0 if antiguedad   == "NO_APLICA" else 1
+            X_new["EMPRESASUNICAS_CONSULT"] = emp_unicas
+            X_new["TIENE_DEPTO"]            = 0 if departamento == "NO_APLICA" else 1
+            X_new["TIENE_ANTIGUEDAD"]       = 0 if antiguedad   == "NO_APLICA" else 1
 
         # Canal de registro
         if canal == "WEB"  and "CANAL_REGISTRO_WEB" in X_new.columns:
