@@ -104,27 +104,21 @@ def calcular_clusters(tipo_key):
 def calcular_metricas(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
 
+    # Pipeline unificado — mismas columnas para ambos tipos
+    numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","EMPRESASUNICAS_CONSULT",
+                   "DIASCLIENTE","PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
+    categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
+                   "DESC_SECTOR","ESTADO","TAMAÑO"]
+
     if tipo_key == "NATURAL":
-        d["TIENE_DEPTO"]      = d["DEPARTAMENTO"].notna().astype(int)
-        d["TIENE_ANTIGUEDAD"] = d["ANTIGUEDAD"].notna().astype(int)
-        d["DEPARTAMENTO"]     = d["DEPARTAMENTO"].fillna("NO_APLICA")
-        d["ANTIGUEDAD"]       = d["ANTIGUEDAD"].fillna("NO_APLICA")
-        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
+        d["DEPARTAMENTO"] = d["DEPARTAMENTO"].fillna("NO_APLICA")
+        d["ANTIGUEDAD"]   = d["ANTIGUEDAD"].fillna("NO_APLICA")
+        d["TAMAÑO"]       = d["TAMAÑO"].fillna("NO_APLICA")
         d["segmento_final"] = d["TOTAL_VENTAS"].apply(segmentar_nat)
         y = d["segmento_final"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL",
-                       "TIENE_DEPTO","TIENE_ANTIGUEDAD"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO"]
     else:
-        d = d.drop(columns=["EMPRESASUNICAS_CONSULT"], errors="ignore")
         d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
         y = d["segmento_finaljur"]
-        numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","DIASCLIENTE",
-                       "PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
-        categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
-                       "DESC_SECTOR","ESTADO","TAMAÑO"]
 
     numericas   = [c for c in numericas   if c in d.columns]
     categoricas = [c for c in categoricas if c in d.columns]
@@ -484,18 +478,14 @@ elif seccion == "🔮 Predicción":
         antiguedad      = st.selectbox("Antigüedad",           ANTIGUEDADES)
         sector          = st.selectbox("Sector económico",     SECTORES)
         estado          = st.selectbox("Estado",               ESTADOS)
-        if tipo_key == "JURIDICO":
-            tamanio     = st.selectbox("Tamaño empresa",       ["MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
-        if tipo_key == "NATURAL":
-            emp_unicas  = st.number_input("Empresas únicas consultadas", min_value=0, value=3, step=1)
+        tamanio    = st.selectbox("Tamaño empresa", ["NO_APLICA","MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
+        emp_unicas = st.number_input("Empresas únicas consultadas", min_value=0, value=3, step=1)
 
     COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
     if st.button("🔮 Predecir segmento"):
-        # Usar exactamente las columnas que el modelo conoce
-        X_new = pd.DataFrame([[0]*len(rf_model.feature_names_in_)], 
-                              columns=rf_model.feature_names_in_)
+        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
 
         # Asignar valores numéricos directamente
         X_new["PROMEDIO_VENTA"]         = promedio_venta
@@ -504,10 +494,8 @@ elif seccion == "🔮 Predicción":
         X_new["DIASCLIENTE"]            = diascliente
         X_new["CLIENTEPORCAMPAÑAEMAIL"] = 1 if "Sí" in email_campana else 0
 
-        if tipo_key == "NATURAL":
+        if "EMPRESASUNICAS_CONSULT" in X_new.columns:
             X_new["EMPRESASUNICAS_CONSULT"] = emp_unicas
-            X_new["TIENE_DEPTO"]            = 0 if departamento == "NO_APLICA" else 1
-            X_new["TIENE_ANTIGUEDAD"]       = 0 if antiguedad   == "NO_APLICA" else 1
 
         # Canal de registro
         if canal == "WEB"  and "CANAL_REGISTRO_WEB" in X_new.columns:
