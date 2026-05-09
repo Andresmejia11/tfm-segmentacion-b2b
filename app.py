@@ -493,8 +493,9 @@ elif seccion == "🔮 Predicción":
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
     if st.button("🔮 Predecir segmento"):
-        # Crear vector con todas las columnas del modelo en cero
-        X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
+        # Usar exactamente las columnas que el modelo conoce
+        X_new = pd.DataFrame([[0]*len(rf_model.feature_names_in_)], 
+                              columns=rf_model.feature_names_in_)
 
         # Asignar valores numéricos directamente
         X_new["PROMEDIO_VENTA"]         = promedio_venta
