@@ -14,8 +14,7 @@ from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Funciones de segmentación ──────────────────────────────
-def segmentar_nat(x):
+# ── Funciones de segmentación 
     if x <= 15:    return "MUY_BAJO"
     elif x <= 35:  return "BAJO"
     elif x <= 65:  return "MEDIO"
@@ -29,7 +28,7 @@ def segmentar_jur(x):
     elif x <= 500: return "ALTO"
     else:          return "VIP"
 
-# ── Carga de datos ─────────────────────────────────────────
+# ── Carga de datos
 @st.cache_data(show_spinner="Cargando datos...")
 def cargar_datos():
     base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
@@ -45,7 +44,7 @@ def cargar_datos():
 
 clientes, ventas, consultas = cargar_datos()
 
-# ── Procesamiento base ─────────────────────────────────────
+# ── Procesamiento base
 @st.cache_data(show_spinner="Procesando datos...")
 def procesar_datos(_clientes, _ventas, _consultas):
     ventas_agg = _ventas.groupby("ID").agg(
@@ -164,9 +163,8 @@ seccion = st.sidebar.radio("", [
     "🏠 Inicio", "📊 Segmentación", "🔮 Predicción", "⚖️ Comparación"
 ])
 
-# ══════════════════════════════════════════════════════════════
 # INICIO
-# ══════════════════════════════════════════════════════════════
+
 if seccion == "🏠 Inicio":
     st.title("📊 Segmentación de Clientes B2B")
     st.subheader("Análisis de recurrencia en el sector de información empresarial · Colombia")
@@ -188,9 +186,9 @@ if seccion == "🏠 Inicio":
         st.info("🎯 **Predicción Naturales** · Random Forest 96% de precisión")
         st.info("🎯 **Predicción Jurídicos** · Random Forest 89% de precisión")
 
-# ══════════════════════════════════════════════════════════════
+
 # SEGMENTACIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "📊 Segmentación":
     st.title("📊 Segmentación de Clientes")
     st.markdown("---")
@@ -341,9 +339,9 @@ elif seccion == "📊 Segmentación":
             - Validación visual independiente de K-Means y DBSCAN.
             """)
 
-# ══════════════════════════════════════════════════════════════
+
 # PREDICCIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
@@ -411,7 +409,7 @@ elif seccion == "🔮 Predicción":
 
     st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
 
-    # Columnas exactas por tipo — extraídas directamente del notebook
+    # Columnas exactas por tipo 
     if tipo_key == "NATURAL":
         DEPARTAMENTOS = ["NO_APLICA","ANTIOQUIA","ARAUCA","ATLANTICO","BOGOTA",
                          "BOLIVAR","BOYACA","CALDAS","CAQUETA","CASANARE","CAUCA",
@@ -555,9 +553,9 @@ elif seccion == "🔮 Predicción":
             </div>
             """, unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
+
 # COMPARACIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "⚖️ Comparación":
     st.title("⚖️ Comparación · Naturales vs Jurídicos")
     st.markdown("---")
