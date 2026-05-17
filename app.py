@@ -15,6 +15,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ── Funciones de segmentación 
+def segmentar_nat(x):
     if x <= 15:    return "MUY_BAJO"
     elif x <= 35:  return "BAJO"
     elif x <= 65:  return "MEDIO"
@@ -28,7 +29,7 @@ def segmentar_jur(x):
     elif x <= 500: return "ALTO"
     else:          return "VIP"
 
-# ── Carga de datos
+# ── Carga de datos 
 @st.cache_data(show_spinner="Cargando datos...")
 def cargar_datos():
     base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
@@ -44,7 +45,7 @@ def cargar_datos():
 
 clientes, ventas, consultas = cargar_datos()
 
-# ── Procesamiento base
+# ── Procesamiento base 
 @st.cache_data(show_spinner="Procesando datos...")
 def procesar_datos(_clientes, _ventas, _consultas):
     ventas_agg = _ventas.groupby("ID").agg(
@@ -72,7 +73,7 @@ df = procesar_datos(clientes, ventas, consultas)
 
 VARS = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
 
-# ── Pipeline clustering ────────────────────────────────────
+# ── Pipeline clustering 
 @st.cache_data(show_spinner="Calculando clusters...")
 def calcular_clusters(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
@@ -98,7 +99,7 @@ def calcular_clusters(tipo_key):
     d["PC2"] = X_pca[:, 1]
     return d, X_scaled, pca.explained_variance_ratio_
 
-# ── Pipeline predicción ────────────────────────────────────
+# ── Pipeline predicción 
 @st.cache_data(show_spinner="Entrenando modelos...")
 def calcular_metricas(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
@@ -152,7 +153,7 @@ def calcular_metricas(tipo_key):
 NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
 COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
 
-# ── Configuración ──────────────────────────────────────────
+# ── Configuración 
 st.set_page_config(
     page_title="Segmentación Clientes B2B · Colombia",
     page_icon="📊", layout="wide"
@@ -162,6 +163,7 @@ st.sidebar.title("Navegación")
 seccion = st.sidebar.radio("", [
     "🏠 Inicio", "📊 Segmentación", "🔮 Predicción", "⚖️ Comparación"
 ])
+
 
 # INICIO
 
