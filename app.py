@@ -14,7 +14,7 @@ from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Funciones de segmentación 
+# ── Funciones de segmentación ──────────────────────────────
 def segmentar_nat(x):
     if x <= 15:    return "MUY_BAJO"
     elif x <= 35:  return "BAJO"
@@ -29,7 +29,81 @@ def segmentar_jur(x):
     elif x <= 500: return "ALTO"
     else:          return "VIP"
 
-# ── Carga de datos 
+# ── Recomendaciones de negocio por segmento ────────────────
+RECOMENDACIONES = {
+    "NATURAL": {
+        "Ocasionales": {
+            "color": "#6366f1",
+            "icono": "🔵",
+            "perfil": "Clientes con 1-2 compras, bajo ticket promedio y pocas consultas. Muchos sin departamento registrado (persona física).",
+            "acciones": [
+                "📧 Campaña de reactivación por email — ya tienen `CLIENTEPORCAMPAÑAEMAIL` registrado",
+                "🎯 Oferta de segunda compra con descuento del 10-15%",
+                "📞 Contacto comercial proactivo para entender sus necesidades",
+                "📊 Monitorear si consultan pero no compran — son leads calientes",
+            ]
+        },
+        "Recurrentes": {
+            "color": "#10b981",
+            "icono": "🟢",
+            "perfil": "Clientes con frecuencia de compra media, ticket moderado y nivel de consultas activo. Segmento más estable y predecible.",
+            "acciones": [
+                "🏆 Programa de fidelización basado en número de compras acumuladas",
+                "🔔 Alertas personalizadas de nuevos productos según su sector económico",
+                "💰 Descuentos por volumen para incentivar mayor ticket por compra",
+                "📈 Objetivo: moverlos hacia el segmento Intensivo en 6 meses",
+            ]
+        },
+        "Intensivos": {
+            "color": "#f59e0b",
+            "icono": "🟡",
+            "perfil": "Alto PROMEDIO_VENTA, muchas compras y muchas consultas. Son pocos pero generan la mayor parte del ingreso.",
+            "acciones": [
+                "👤 Asignar gestor de cuenta dedicado — son clientes estratégicos",
+                "🌟 Acceso prioritario a nuevos productos e información exclusiva",
+                "🤝 Reuniones periódicas para entender su evolución de negocio",
+                "🔒 Contrato de fidelización a largo plazo con condiciones preferenciales",
+            ]
+        }
+    },
+    "JURIDICO": {
+        "Ocasionales": {
+            "color": "#6366f1",
+            "icono": "🔵",
+            "perfil": "Empresas con 1-2 compras y bajo volumen. Tienen datos completos (departamento, antigüedad, tamaño) — se puede personalizar mucho la estrategia.",
+            "acciones": [
+                "🏢 Visita comercial presencial — son empresas, el contacto directo funciona mejor",
+                "📋 Propuesta personalizada según su sector y tamaño empresarial",
+                "🔍 Analizar si consultan mucho pero no compran — puede ser barrera de precio",
+                "📧 Campaña de nurturing B2B por sector económico",
+            ]
+        },
+        "Recurrentes": {
+            "color": "#10b981",
+            "icono": "🟢",
+            "perfil": "Empresas con compras periódicas, ticket medio y buen nivel de consultas. Segmento con mayor potencial de crecimiento.",
+            "acciones": [
+                "📄 Contrato marco anual con condiciones fijas — reduce fricción de compra",
+                "💼 Descuentos por volumen acumulado trimestral",
+                "📊 Reporte periódico de uso y valor generado — refuerza la relación",
+                "🎯 Objetivo: aumentar ticket promedio mediante venta cruzada por sector",
+            ]
+        },
+        "Intensivos": {
+            "color": "#f59e0b",
+            "icono": "🟡",
+            "perfil": "Empresas con alto PROMEDIO_VENTA, muchas compras y consulta de muchas empresas únicas. Son los clientes más valiosos y los más difíciles de reemplazar.",
+            "acciones": [
+                "👔 Account Manager exclusivo con SLA de respuesta en menos de 2 horas",
+                "🔗 Integración de sistemas o API para automatizar sus consultas",
+                "📑 Acuerdo estratégico de largo plazo con revisión anual de condiciones",
+                "🏆 Programa VIP con acceso anticipado a nuevas bases de datos y sectores",
+            ]
+        }
+    }
+}
+
+# ── Carga de datos ─────────────────────────────────────────
 @st.cache_data(show_spinner="Cargando datos...")
 def cargar_datos():
     base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
@@ -45,7 +119,7 @@ def cargar_datos():
 
 clientes, ventas, consultas = cargar_datos()
 
-# ── Procesamiento base 
+# ── Procesamiento base ─────────────────────────────────────
 @st.cache_data(show_spinner="Procesando datos...")
 def procesar_datos(_clientes, _ventas, _consultas):
     ventas_agg = _ventas.groupby("ID").agg(
@@ -73,7 +147,7 @@ df = procesar_datos(clientes, ventas, consultas)
 
 VARS = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
 
-# ── Pipeline clustering 
+# ── Pipeline clustering ────────────────────────────────────
 @st.cache_data(show_spinner="Calculando clusters...")
 def calcular_clusters(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
@@ -99,17 +173,14 @@ def calcular_clusters(tipo_key):
     d["PC2"] = X_pca[:, 1]
     return d, X_scaled, pca.explained_variance_ratio_
 
-# ── Pipeline predicción 
+# ── Pipeline predicción ────────────────────────────────────
 @st.cache_data(show_spinner="Entrenando modelos...")
 def calcular_metricas(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
-
-    # Pipeline unificado — mismas columnas para ambos tipos
     numericas   = ["NUM_COMPRAS","NUM_CONSULTAS","EMPRESASUNICAS_CONSULT",
                    "DIASCLIENTE","PROMEDIO_VENTA","CLIENTEPORCAMPAÑAEMAIL"]
     categoricas = ["CANAL_REGISTRO","DEPARTAMENTO","ANTIGUEDAD",
                    "DESC_SECTOR","ESTADO","TAMAÑO"]
-
     if tipo_key == "NATURAL":
         d["DEPARTAMENTO"] = d["DEPARTAMENTO"].fillna("NO_APLICA")
         d["ANTIGUEDAD"]   = d["ANTIGUEDAD"].fillna("NO_APLICA")
@@ -119,27 +190,20 @@ def calcular_metricas(tipo_key):
     else:
         d["segmento_finaljur"] = d["TOTAL_VENTAS"].apply(segmentar_jur)
         y = d["segmento_finaljur"]
-
     numericas   = [c for c in numericas   if c in d.columns]
     categoricas = [c for c in categoricas if c in d.columns]
     X = d[numericas + categoricas].copy()
     X_encoded = pd.get_dummies(X, drop_first=True).astype(int)
-
     X_train, X_test, y_train, y_test = train_test_split(
         X_encoded, y, test_size=0.2, random_state=42
     )
-
-    # Random Forest
     rf = RandomForestClassifier(random_state=42)
     rf.fit(X_train, y_train)
     y_pred_rf = rf.predict(X_test)
     report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
-
     importancias = pd.Series(
         rf.feature_importances_, index=X_encoded.columns
     ).sort_values(ascending=False).head(10)
-
-    # Logistic Regression
     scaler2    = StandardScaler()
     X_train_sc = scaler2.fit_transform(X_train)
     X_test_sc  = scaler2.transform(X_test)
@@ -147,13 +211,12 @@ def calcular_metricas(tipo_key):
     lr.fit(X_train_sc, y_train)
     y_pred_lr = lr.predict(X_test_sc)
     report_lr = classification_report(y_test, y_pred_lr, output_dict=True)
-
     return rf, lr, scaler2, X_encoded.columns.tolist(), report_rf, report_lr, importancias
 
 NOMBRES = {0: "Ocasionales", 1: "Recurrentes", 2: "Intensivos"}
 COLORES = {"Ocasionales": "#6366f1", "Recurrentes": "#10b981", "Intensivos": "#f59e0b"}
 
-# ── Configuración 
+# ── Configuración ──────────────────────────────────────────
 st.set_page_config(
     page_title="Segmentación Clientes B2B · Colombia",
     page_icon="📊", layout="wide"
@@ -161,12 +224,12 @@ st.set_page_config(
 st.sidebar.image("https://img.icons8.com/color/96/combo-chart.png", width=60)
 st.sidebar.title("Navegación")
 seccion = st.sidebar.radio("", [
-    "🏠 Inicio", "📊 Segmentación", "🔮 Predicción", "⚖️ Comparación"
+    "🏠 Inicio", "📊 Segmentación", "🔮 Predicción", "⚖️ Comparación", "📂 Cargar datos"
 ])
 
-
+# ══════════════════════════════════════════════════════════════
 # INICIO
-
+# ══════════════════════════════════════════════════════════════
 if seccion == "🏠 Inicio":
     st.title("📊 Segmentación de Clientes B2B")
     st.subheader("Análisis de recurrencia en el sector de información empresarial · Colombia")
@@ -188,9 +251,9 @@ if seccion == "🏠 Inicio":
         st.info("🎯 **Predicción Naturales** · Random Forest 96% de precisión")
         st.info("🎯 **Predicción Jurídicos** · Random Forest 89% de precisión")
 
-
+# ══════════════════════════════════════════════════════════════
 # SEGMENTACIÓN
-
+# ══════════════════════════════════════════════════════════════
 elif seccion == "📊 Segmentación":
     st.title("📊 Segmentación de Clientes")
     st.markdown("---")
@@ -211,18 +274,22 @@ elif seccion == "📊 Segmentación":
     if analisis == "👥 Perfiles de clusters":
         st.subheader(f"Perfiles de clusters · {tipo_key.title()}")
         perfil = df_seg.groupby("Segmento")[VARS].mean().reset_index()
+
         col1, col2, col3 = st.columns(3)
         for col, seg in zip([col1, col2, col3], ["Ocasionales", "Recurrentes", "Intensivos"]):
             row = perfil[perfil["Segmento"] == seg]
             if not row.empty:
-                col.markdown(f"**{seg}**")
+                rec = RECOMENDACIONES[tipo_key][seg]
+                col.markdown(f"**{rec['icono']} {seg}**")
                 col.metric("Ventas promedio", f"${row['TOTAL_VENTAS'].values[0]:,.0f}")
                 col.metric("Nº compras",      f"{row['NUM_COMPRAS'].values[0]:.1f}")
                 col.metric("Nº consultas",    f"{row['NUM_CONSULTAS'].values[0]:.0f}")
                 col.metric("Empresas únicas", f"{row['EMPRESASUNICAS_CONSULT'].values[0]:.1f}")
+
         st.markdown("---")
         st.markdown("**Tabla completa de promedios**")
         st.dataframe(perfil.set_index("Segmento").round(2), use_container_width=True)
+
         st.markdown("**Distribución por segmento**")
         conteo = df_seg["Segmento"].value_counts().reset_index()
         conteo.columns = ["Segmento", "Clientes"]
@@ -230,12 +297,16 @@ elif seccion == "📊 Segmentación":
                      color_discrete_map=COLORES, template="simple_white", text="Clientes")
         fig.update_layout(showlegend=False, height=350)
         st.plotly_chart(fig, use_container_width=True)
-        with st.expander("¿Cómo interpretar estos perfiles?"):
-            st.markdown("""
-            - **Ocasionales:** compran poco y generan bajos ingresos.
-            - **Recurrentes:** frecuencia media, segmento más estable.
-            - **Intensivos:** alta frecuencia, alto monto, los más valiosos.
-            """)
+
+        # ── Recomendaciones de negocio ─────────────────────
+        st.markdown("---")
+        st.markdown("### 💡 Recomendaciones de negocio por segmento")
+        for seg in ["Ocasionales", "Recurrentes", "Intensivos"]:
+            rec = RECOMENDACIONES[tipo_key][seg]
+            with st.expander(f"{rec['icono']} **{seg}** — {rec['perfil']}"):
+                st.markdown("**Acciones recomendadas:**")
+                for accion in rec["acciones"]:
+                    st.markdown(f"- {accion}")
 
     elif analisis == "📈 Plano FM (Frecuencia vs Monto)":
         st.subheader("Plano FM · Naturales vs Jurídicos")
@@ -316,9 +387,15 @@ elif seccion == "📊 Segmentación":
         with st.expander("¿Cómo interpretar el DBSCAN?"):
             st.markdown("""
             - Agrupa clientes por densidad sin definir k de antemano.
-            - **Ruido:** clientes atípicos que no encajan en ningún grupo.
-            - Valida los clusters de K-Means.
+            - **Ruido:** clientes atípicos que no encajan en ningún grupo — merecen análisis individual.
+            - Si DBSCAN encuentra los mismos grupos que K-Means, la segmentación es sólida.
             """)
+        if n_ruido > 0:
+            pct_ruido = n_ruido / len(df_seg) * 100
+            if pct_ruido > 5:
+                st.warning(f"⚠️ {n_ruido} clientes ({pct_ruido:.1f}%) fueron clasificados como ruido. Pueden ser clientes VIP atípicos o registros con datos incompletos — vale la pena revisarlos individualmente.")
+            else:
+                st.success(f"✅ Solo {n_ruido} clientes ({pct_ruido:.1f}%) como ruido — la segmentación es muy limpia.")
 
     elif analisis == "🧠 SOM":
         st.subheader(f"SOM - U-Matrix · {tipo_key.title()}")
@@ -336,14 +413,15 @@ elif seccion == "📊 Segmentación":
         st.plotly_chart(fig, use_container_width=True)
         with st.expander("¿Cómo interpretar la U-Matrix del SOM?"):
             st.markdown("""
-            - 🔵 **Colores fríos (azul)** → zonas densas = clústeres.
-            - 🔴 **Colores cálidos (rojo/amarillo)** → fronteras entre segmentos.
-            - Validación visual independiente de K-Means y DBSCAN.
+            - 🔵 **Colores fríos (azul)** → zonas densas = clústeres bien definidos.
+            - 🔴 **Colores cálidos (rojo/amarillo)** → fronteras naturales entre segmentos.
+            - Zonas azules claramente separadas confirman que los 3 segmentos son distintos.
+            - Es una validación visual independiente de K-Means y DBSCAN.
             """)
 
-
+# ══════════════════════════════════════════════════════════════
 # PREDICCIÓN
-
+# ══════════════════════════════════════════════════════════════
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
@@ -411,7 +489,6 @@ elif seccion == "🔮 Predicción":
 
     st.markdown("### 🔍 Predice el segmento de un cliente nuevo")
 
-    # Columnas exactas por tipo 
     if tipo_key == "NATURAL":
         DEPARTAMENTOS = ["NO_APLICA","ANTIOQUIA","ARAUCA","ATLANTICO","BOGOTA",
                          "BOLIVAR","BOYACA","CALDAS","CAQUETA","CASANARE","CAUCA",
@@ -419,7 +496,7 @@ elif seccion == "🔮 Predicción":
                          "LA GUAJIRA","MAGDALENA","META","NARINO","NORTE SANTANDER",
                          "PUTUMAYO","QUINDIO","RISARALDA","SAN ANDRES","SANTANDER",
                          "SUCRE","TOLIMA","VALLE"]
-        SECTORES = ["NOSECTOR",
+        SECTORES     = ["NOSECTOR",
             "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
             "ACTIVIDADES DE LOS HOGARES INDIVIDUALES EN CALIDAD DE EMPLEADORES; ACTIVIDADES NO DIFERENCIADAS DE LOS HOGARES INDIVIDUALES COMO PRODUCTORES DE BIENES Y SERVICIOS PARA USO PROPIO",
             "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
@@ -434,7 +511,7 @@ elif seccion == "🔮 Predicción":
             "EDUCACIÓN","EXPLOTACIÓN DE MINAS Y CANTERAS","INDUSTRIAS MANUFACTURERAS",
             "INFORMACIÓN Y COMUNICACIONES","OTRAS ACTIVIDADES DE SERVICIOS",
             "TRANSPORTE Y ALMACENAMIENTO"]
-        ESTADOS    = ["ACTIVA","INACTIVA","INSOLVENTE","VIVA"]
+        ESTADOS      = ["ACTIVA","INACTIVA","INSOLVENTE","VIVA"]
         ANTIGUEDADES = ["NO_APLICA","Menos de 3 Meses","De 3 a 18 Meses",
                         "De 3 a 5 Años","De 5 a 10 Años","Más de 10 Años",
                         "SIN FECHA DE CONSTITUCION"]
@@ -445,7 +522,7 @@ elif seccion == "🔮 Predicción":
                          "MAGDALENA","META","NARINO","NORTE SANTANDER","PUTUMAYO",
                          "QUINDIO","RISARALDA","SAN ANDRES","SANTANDER","SUCRE",
                          "TOLIMA","VALLE"]
-        SECTORES = [
+        SECTORES     = [
             "ACTIVIDADES DE ATENCIÓN DE LA SALUD HUMANA Y DE ASISTENCIA SOCIAL",
             "ACTIVIDADES DE LOS HOGARES INDIVIDUALES EN CALIDAD DE EMPLEADORES; ACTIVIDADES NO DIFERENCIADAS DE LOS HOGARES INDIVIDUALES COMO PRODUCTORES DE BIENES Y SERVICIOS PARA USO PROPIO",
             "ACTIVIDADES DE SERVICIOS ADMINISTRATIVOS Y DE APOYO",
@@ -461,73 +538,60 @@ elif seccion == "🔮 Predicción":
             "INFORMACIÓN Y COMUNICACIONES","OTRAS ACTIVIDADES DE SERVICIOS",
             "SUMINISTRO DE ELECTRICIDAD, GAS, VAPOR Y AIRE ACONDICIONADO",
             "TRANSPORTE Y ALMACENAMIENTO"]
-        ESTADOS    = ["ACTIVA","INACTIVA","INSOLVENTE","EXTINGUIDA"]
+        ESTADOS      = ["ACTIVA","INACTIVA","INSOLVENTE","EXTINGUIDA"]
         ANTIGUEDADES = ["De 3 a 18 Meses","De 3 a 5 Años","De 5 a 10 Años",
                         "Más de 10 Años","SIN FECHA DE CONSTITUCION"]
 
     c1, c2 = st.columns(2)
     with c1:
-        promedio_venta  = st.number_input("Promedio por venta (COP)",    min_value=0.0, value=25.0,  step=5.0)
-        num_compras     = st.number_input("Número de compras",            min_value=0,   value=2,     step=1)
-        num_consultas   = st.number_input("Número de consultas",          min_value=0,   value=5,     step=1)
-        diascliente     = st.number_input("Días como cliente",            min_value=0,   value=365,   step=30)
-        email_campana   = st.selectbox("¿Cliente por campaña email?",     ["No (0)","Sí (1)"])
+        promedio_venta = st.number_input("Promedio por venta (COP)",        min_value=0.0, value=25.0, step=5.0)
+        num_compras    = st.number_input("Número de compras",                min_value=0,   value=2,   step=1)
+        num_consultas  = st.number_input("Número de consultas",              min_value=0,   value=5,   step=1)
+        emp_unicas     = st.number_input("Empresas únicas consultadas",      min_value=0,   value=3,   step=1)
+        diascliente    = st.number_input("Días como cliente",                min_value=0,   value=365, step=30)
+        email_campana  = st.selectbox("¿Cliente por campaña email?",         ["No (0)","Sí (1)"])
     with c2:
-        canal           = st.selectbox("Canal de registro",  ["WEB","SEM","Directorios","Otro"])
-        departamento    = st.selectbox("Departamento",         DEPARTAMENTOS)
-        antiguedad      = st.selectbox("Antigüedad",           ANTIGUEDADES)
-        sector          = st.selectbox("Sector económico",     SECTORES)
-        estado          = st.selectbox("Estado",               ESTADOS)
-        tamanio    = st.selectbox("Tamaño empresa", ["NO_APLICA","MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
-        emp_unicas = st.number_input("Empresas únicas consultadas", min_value=0, value=3, step=1)
+        canal          = st.selectbox("Canal de registro",                   ["WEB","SEM","Directorios","Otro"])
+        departamento   = st.selectbox("Departamento",                        DEPARTAMENTOS)
+        antiguedad     = st.selectbox("Antigüedad",                          ANTIGUEDADES)
+        sector         = st.selectbox("Sector económico",                    SECTORES)
+        estado         = st.selectbox("Estado",                              ESTADOS)
+        tamanio        = st.selectbox("Tamaño empresa",                      ["NO_APLICA","MICRO","PEQUEÑA","MEDIANA","GRANDE","SIN DETERMINAR"])
 
     COLORES_SEG = {"MUY_BAJO":"#94a3b8","BAJO":"#60a5fa",
                    "MEDIO":"#34d399","ALTO":"#f59e0b","VIP":"#ef4444"}
 
+    REC_PRED = {
+        "MUY_BAJO": "🔴 Campaña de reactivación urgente. Considerar contacto directo para entender barreras de compra.",
+        "BAJO":     "🟠 Cliente con potencial. Oferta personalizada de segunda compra y seguimiento comercial.",
+        "MEDIO":    "🟡 Cliente estable. Incentivos para aumentar frecuencia — descuentos por volumen o programa de puntos.",
+        "ALTO":     "🟢 Cliente valioso. Atención preferencial, acceso anticipado a nuevos productos y fidelización activa.",
+        "VIP":      "⭐ Cliente estratégico. Gestor dedicado, condiciones exclusivas y relación de largo plazo."
+    }
+
     if st.button("🔮 Predecir segmento"):
         X_new = pd.DataFrame([[0]*len(feature_cols)], columns=feature_cols)
-
-        # Asignar valores numéricos directamente
         X_new["PROMEDIO_VENTA"]         = promedio_venta
         X_new["NUM_COMPRAS"]            = num_compras
         X_new["NUM_CONSULTAS"]          = num_consultas
         X_new["DIASCLIENTE"]            = diascliente
         X_new["CLIENTEPORCAMPAÑAEMAIL"] = 1 if "Sí" in email_campana else 0
-
         if "EMPRESASUNICAS_CONSULT" in X_new.columns:
             X_new["EMPRESASUNICAS_CONSULT"] = emp_unicas
-
-        # Canal de registro
-        if canal == "WEB"  and "CANAL_REGISTRO_WEB" in X_new.columns:
+        if canal == "WEB" and "CANAL_REGISTRO_WEB" in X_new.columns:
             X_new["CANAL_REGISTRO_WEB"] = 1
         elif canal == "SEM" and "CANAL_REGISTRO_SEM" in X_new.columns:
             X_new["CANAL_REGISTRO_SEM"] = 1
-
-        # Departamento
-        col_depto = f"DEPARTAMENTO_{departamento}"
-        if col_depto in X_new.columns:
-            X_new[col_depto] = 1
-
-        # Antigüedad
+        col_dep = f"DEPARTAMENTO_{departamento}"
+        if col_dep in X_new.columns: X_new[col_dep] = 1
         col_ant = f"ANTIGUEDAD_{antiguedad}"
-        if col_ant in X_new.columns:
-            X_new[col_ant] = 1
-
-        # Sector
-        col_sector = f"DESC_SECTOR_{sector}"
-        if col_sector in X_new.columns:
-            X_new[col_sector] = 1
-
-        # Estado
-        col_estado = f"ESTADO_{estado}"
-        if col_estado in X_new.columns:
-            X_new[col_estado] = 1
-
-        # Tamaño (solo jurídicos)
-        if tipo_key == "JURIDICO":
-            col_tam = f"TAMAÑO_{tamanio}"
-            if col_tam in X_new.columns:
-                X_new[col_tam] = 1
+        if col_ant in X_new.columns: X_new[col_ant] = 1
+        col_sec = f"DESC_SECTOR_{sector}"
+        if col_sec in X_new.columns: X_new[col_sec] = 1
+        col_est = f"ESTADO_{estado}"
+        if col_est in X_new.columns: X_new[col_est] = 1
+        col_tam = f"TAMAÑO_{tamanio}"
+        if col_tam in X_new.columns: X_new[col_tam] = 1
 
         pred  = rf_model.predict(X_new)[0]
         proba = rf_model.predict_proba(X_new)[0]
@@ -555,9 +619,12 @@ elif seccion == "🔮 Predicción":
             </div>
             """, unsafe_allow_html=True)
 
+        st.markdown("---")
+        st.markdown(f"**💡 Recomendación:** {REC_PRED.get(pred, '')}")
 
+# ══════════════════════════════════════════════════════════════
 # COMPARACIÓN
-
+# ══════════════════════════════════════════════════════════════
 elif seccion == "⚖️ Comparación":
     st.title("⚖️ Comparación · Naturales vs Jurídicos")
     st.markdown("---")
@@ -585,3 +652,52 @@ elif seccion == "⚖️ Comparación":
             template="simple_white", height=350)
         col.plotly_chart(fig, use_container_width=True)
         col.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+
+# ══════════════════════════════════════════════════════════════
+# CARGAR DATOS
+# ══════════════════════════════════════════════════════════════
+elif seccion == "📂 Cargar datos":
+    st.title("📂 Cargar datos actualizados")
+    st.markdown("---")
+    st.info("Sube los tres archivos con la misma estructura para analizar datos nuevos.")
+
+    f_clientes  = st.file_uploader("CLIENTES.txt",         type=["txt","csv"])
+    f_ventas    = st.file_uploader("VENTAS.txt",           type=["txt","csv"])
+    f_consultas = st.file_uploader("CONSULTAS.txt / .zip", type=["txt","csv","zip"])
+
+    if f_clientes and f_ventas and f_consultas:
+        import zipfile, io
+        try:
+            clientes_new = pd.read_csv(f_clientes, sep="|", encoding="latin-1")
+            ventas_new   = pd.read_csv(f_ventas,   sep="|", encoding="latin-1")
+            if f_consultas.name.endswith(".zip"):
+                with zipfile.ZipFile(io.BytesIO(f_consultas.read())) as z:
+                    nombre = [f for f in z.namelist() if f.endswith(".txt")][0]
+                    with z.open(nombre) as f:
+                        consultas_new = pd.read_csv(f, sep="|", encoding="latin-1")
+            else:
+                consultas_new = pd.read_csv(f_consultas, sep="|", encoding="latin-1")
+
+            df_new = procesar_datos(clientes_new, ventas_new, consultas_new)
+            total  = len(df_new)
+            n_nat  = (df_new["TIPO_CLIENTE"] == "NATURAL").sum()
+            n_jur  = (df_new["TIPO_CLIENTE"] == "JURIDICO").sum()
+
+            st.success("✅ Archivos cargados correctamente")
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Total clientes",     f"{total:,}")
+            k2.metric("Clientes Naturales", f"{n_nat:,}", f"{n_nat/total*100:.1f}%")
+            k3.metric("Clientes Jurídicos", f"{n_jur:,}", f"{n_jur/total*100:.1f}%")
+            st.markdown("---")
+            st.markdown("**Vista previa:**")
+            st.dataframe(df_new.head(10), use_container_width=True)
+            st.info("Para analizar estos datos completos, reemplaza los archivos en GitHub y la app se actualizará automáticamente.")
+        except Exception as e:
+            st.error(f"Error al procesar los archivos: {e}")
+    else:
+        st.markdown("""
+        **Estructura requerida:**
+        - **CLIENTES.txt** — separado por `|` con las mismas columnas originales
+        - **VENTAS.txt** — separado por `|` con columnas `ID` e `IMPORTE`
+        - **CONSULTAS.txt** — separado por `|` con columnas `IDCONSUMO` e `ID`
+        """)
