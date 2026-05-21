@@ -368,6 +368,17 @@ elif seccion == "📊 Segmentación":
             - Mayor varianza explicada = representación más fiel.
             """)
 
+        st.markdown("### 💡 Lectura de negocio · PCA")
+        rec_pca = RECOMENDACIONES[tipo_key]
+        col1, col2, col3 = st.columns(3)
+        for col, seg in zip([col1, col2, col3], ["Ocasionales", "Recurrentes", "Intensivos"]):
+            rec = rec_pca[seg]
+            with col:
+                st.markdown(f"**{rec['icono']} {seg}**")
+                st.markdown(f"<small style='color:#666'>{rec['perfil']}</small>", unsafe_allow_html=True)
+                st.markdown("**Acción clave:**")
+                st.info(rec["acciones"][0])
+
     elif analisis == "🔍 DBSCAN":
         st.subheader(f"DBSCAN · {tipo_key.title()}")
         eps_val = 0.85 if tipo_key == "NATURAL" else 0.7
@@ -390,12 +401,36 @@ elif seccion == "📊 Segmentación":
             - **Ruido:** clientes atípicos que no encajan en ningún grupo — merecen análisis individual.
             - Si DBSCAN encuentra los mismos grupos que K-Means, la segmentación es sólida.
             """)
+        pct_ruido = n_ruido / len(df_seg) * 100
         if n_ruido > 0:
-            pct_ruido = n_ruido / len(df_seg) * 100
             if pct_ruido > 5:
-                st.warning(f"⚠️ {n_ruido} clientes ({pct_ruido:.1f}%) fueron clasificados como ruido. Pueden ser clientes VIP atípicos o registros con datos incompletos — vale la pena revisarlos individualmente.")
+                st.warning(f"⚠️ {n_ruido} clientes ({pct_ruido:.1f}%) clasificados como ruido.")
             else:
-                st.success(f"✅ Solo {n_ruido} clientes ({pct_ruido:.1f}%) como ruido — la segmentación es muy limpia.")
+                st.success(f"✅ Solo {n_ruido} clientes ({pct_ruido:.1f}%) como ruido — segmentación limpia.")
+
+        st.markdown("### 💡 Lectura de negocio · DBSCAN")
+        if tipo_key == "NATURAL":
+            st.markdown(f"""
+**Clientes en los clusters definidos ({len(df_seg) - n_ruido:,}):**
+- 🔵 Los clusters bien definidos confirman que los 3 segmentos tienen comportamientos claramente distintos entre sí.
+- El algoritmo los agrupa por densidad sin forzar — si coincide con K-Means, la segmentación es sólida.
+
+**Clientes en Ruido ({n_ruido:,} · {pct_ruido:.1f}%):**
+- Son personas naturales con comportamiento atípico — compran mucho más o con una frecuencia inusual.
+- **Acción:** revisarlos individualmente. Pueden ser empresarios clasificados como persona física o clientes con potencial VIP no detectado.
+- Priorizar contacto comercial directo con este grupo.
+            """)
+        else:
+            st.markdown(f"""
+**Clientes en los clusters definidos ({len(df_seg) - n_ruido:,}):**
+- Los clusters reflejan empresas con patrones de compra consistentes dentro de su segmento.
+- La separación por densidad valida que Ocasionales, Recurrentes e Intensivos son grupos reales, no artificiales.
+
+**Clientes en Ruido ({n_ruido:,} · {pct_ruido:.1f}%):**
+- Empresas con comportamiento fuera de lo común — pueden ser grandes corporaciones, holdings o empresas en proceso de cambio.
+- **Acción:** análisis individual por equipo comercial. Verificar si son clientes estratégicos mal clasificados o casos con datos incompletos.
+- Alta probabilidad de que algunos sean candidatos a segmento VIP en la predicción.
+            """)
 
     elif analisis == "🧠 SOM":
         st.subheader(f"SOM - U-Matrix · {tipo_key.title()}")
@@ -417,6 +452,33 @@ elif seccion == "📊 Segmentación":
             - 🔴 **Colores cálidos (rojo/amarillo)** → fronteras naturales entre segmentos.
             - Zonas azules claramente separadas confirman que los 3 segmentos son distintos.
             - Es una validación visual independiente de K-Means y DBSCAN.
+            """)
+
+        st.markdown("### 💡 Lectura de negocio · SOM")
+        if tipo_key == "NATURAL":
+            st.markdown("""
+**¿Qué nos dice el mapa sobre los clientes naturales?**
+
+- 🔵 **Zona densa izquierda (azul intensa):** concentra la mayoría de clientes — son los **Ocasionales y Recurrentes**. Gran volumen, comportamiento predecible. El foco aquí es activación y fidelización masiva.
+
+- 🔴 **Zona cálida central (naranja/amarillo):** frontera entre segmentos — clientes en transición. Son los más interesantes comercialmente: con un pequeño empujón pueden subir de segmento.
+  - **Acción:** campaña dirigida específicamente a este grupo con oferta de upgrade.
+
+- 🔵 **Zona densa derecha (azul):** clientes **Intensivos** — pocos pero con alto valor. El mapa los separa claramente del resto, lo que confirma que son un grupo diferente que necesita estrategia propia.
+  - **Acción:** atención personalizada, no campaña masiva.
+            """)
+        else:
+            st.markdown("""
+**¿Qué nos dice el mapa sobre los clientes jurídicos?**
+
+- 🔵 **Zonas azules densas:** agrupan empresas con comportamiento consistente — **Ocasionales con bajo volumen** y **Recurrentes estables**. Son la base del negocio B2B.
+  - **Acción:** contratos marco y descuentos por volumen para consolidar la relación.
+
+- 🔴 **Zonas cálidas (fronteras):** empresas en transición entre segmentos. En el contexto jurídico esto suele ocurrir cuando una empresa está creciendo o cambiando de sector.
+  - **Acción:** visita comercial para entender su momento de negocio y ajustar la propuesta.
+
+- 🔵 **Zona aislada (azul separada):** empresas **Intensivas** — corporaciones o grupos empresariales con alta frecuencia y ticket elevado. El SOM los separa del resto de forma natural.
+  - **Acción:** account manager dedicado y acuerdo estratégico de largo plazo.
             """)
 
 # ══════════════════════════════════════════════════════════════
