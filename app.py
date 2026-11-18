@@ -14,7 +14,7 @@ from minisom import MiniSom
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Funciones de segmentación ──────────────────────────────
+# Funciones de segmentación 
 def segmentar_nat(x):
     if x <= 15:    return "MUY_BAJO"
     elif x <= 35:  return "BAJO"
@@ -29,7 +29,7 @@ def segmentar_jur(x):
     elif x <= 500: return "ALTO"
     else:          return "VIP"
 
-# ── Recomendaciones de negocio por segmento ────────────────
+# Recomendaciones de negocio por segmento 
 RECOMENDACIONES = {
     "NATURAL": {
         "Ocasionales": {
@@ -103,7 +103,7 @@ RECOMENDACIONES = {
     }
 }
 
-# ── Carga de datos ─────────────────────────────────────────
+# Carga de datos
 @st.cache_data(show_spinner="Cargando datos...")
 def cargar_datos():
     base = "https://raw.githubusercontent.com/Andresmejia11/tfm-segmentacion-b2b/main/"
@@ -119,7 +119,7 @@ def cargar_datos():
 
 clientes, ventas, consultas = cargar_datos()
 
-# ── Procesamiento base ─────────────────────────────────────
+# Procesamiento base 
 @st.cache_data(show_spinner="Procesando datos...")
 def procesar_datos(_clientes, _ventas, _consultas):
     ventas_agg = _ventas.groupby("ID").agg(
@@ -147,7 +147,7 @@ df = procesar_datos(clientes, ventas, consultas)
 
 VARS = ['TOTAL_VENTAS', 'NUM_COMPRAS', 'NUM_CONSULTAS', 'EMPRESASUNICAS_CONSULT']
 
-# ── Pipeline clustering ────────────────────────────────────
+# Pipeline clustering 
 @st.cache_data(show_spinner="Calculando clusters...")
 def calcular_clusters(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
@@ -173,7 +173,7 @@ def calcular_clusters(tipo_key):
     d["PC2"] = X_pca[:, 1]
     return d, X_scaled, pca.explained_variance_ratio_
 
-# ── Pipeline predicción ────────────────────────────────────
+# Pipeline predicción
 @st.cache_data(show_spinner="Entrenando modelos...")
 def calcular_metricas(tipo_key):
     d = df[df["TIPO_CLIENTE"] == tipo_key].copy()
@@ -227,9 +227,9 @@ seccion = st.sidebar.radio("", [
     "🏠 Inicio", "📊 Segmentación", "🔮 Predicción", "⚖️ Comparación", "📂 Cargar datos"
 ])
 
-# ══════════════════════════════════════════════════════════════
+
 # INICIO
-# ══════════════════════════════════════════════════════════════
+
 if seccion == "🏠 Inicio":
     st.title("📊 Segmentación de Clientes B2B")
     st.subheader("Análisis de recurrencia en el sector de información empresarial · Colombia")
@@ -251,9 +251,9 @@ if seccion == "🏠 Inicio":
         st.info("🎯 **Predicción Naturales** · Random Forest 96% de precisión")
         st.info("🎯 **Predicción Jurídicos** · Random Forest 89% de precisión")
 
-# ══════════════════════════════════════════════════════════════
+
 # SEGMENTACIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "📊 Segmentación":
     st.title("📊 Segmentación de Clientes")
     st.markdown("---")
@@ -298,7 +298,7 @@ elif seccion == "📊 Segmentación":
         fig.update_layout(showlegend=False, height=350)
         st.plotly_chart(fig, use_container_width=True)
 
-        # ── Recomendaciones de negocio ─────────────────────
+        # Recomendaciones de negocio 
         st.markdown("---")
         st.markdown("### 💡 Recomendaciones de negocio por segmento")
         for seg in ["Ocasionales", "Recurrentes", "Intensivos"]:
@@ -481,9 +481,9 @@ elif seccion == "📊 Segmentación":
   - **Acción:** account manager dedicado y acuerdo estratégico de largo plazo.
             """)
 
-# ══════════════════════════════════════════════════════════════
+
 # PREDICCIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "🔮 Predicción":
     st.title("🔮 Predicción de Segmento")
     st.markdown("---")
@@ -684,9 +684,9 @@ elif seccion == "🔮 Predicción":
         st.markdown("---")
         st.markdown(f"**💡 Recomendación:** {REC_PRED.get(pred, '')}")
 
-# ══════════════════════════════════════════════════════════════
+
 # COMPARACIÓN
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "⚖️ Comparación":
     st.title("⚖️ Comparación · Naturales vs Jurídicos")
     st.markdown("---")
@@ -715,9 +715,9 @@ elif seccion == "⚖️ Comparación":
         col.plotly_chart(fig, use_container_width=True)
         col.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
 
-# ══════════════════════════════════════════════════════════════
+
 # CARGAR DATOS
-# ══════════════════════════════════════════════════════════════
+
 elif seccion == "📂 Cargar datos":
     st.title("📂 Cargar datos actualizados")
     st.markdown("---")
